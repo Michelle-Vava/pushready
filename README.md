@@ -40,7 +40,7 @@ How it compares:
 - **Repolinter** checked whole repositories, but it needed a config file and was archived in 2026.
 - **Repo health reports** (repo-doctor, GitHealthGuard) score a repo after the fact.
 
-pushready focuses on **stopping the mistake before it's pushed**: zero setup, plain-English fixes, and (on the roadmap) a pre-push hook and `pushready fix` to repair problems for you. It only looks at file names and git metadata, never file contents.
+pushready focuses on **stopping the mistake before it's pushed**: zero setup, plain-English fixes, and (on the roadmap) a deeper look at what's exposed in git history, a pre-push hook, and `pushready fix` to repair problems for you.
 
 ## Background
 
@@ -60,7 +60,7 @@ The tools I found either looked for secrets only, needed configuration, or had b
 
 - Catches the mistake **before** it's public, when fixing it is one command instead of a history rewrite and key rotation.
 - Explains each problem and the exact fix in plain English, so you learn the rule and don't just get a score.
-- Needs nothing: no install step, no config, no account, no network. It can't leak anything because it never reads file contents.
+- Needs nothing: no install step, no config, no account, no network. It runs only on your machine and doesn't open your code or secret files (see [What it reads](#what-it-reads)).
 
 ## Ways to use it
 
@@ -118,7 +118,19 @@ The exit code is `1` if any check fails, so it can be used in scripts and CI.
 | Committed dependencies | files under `node_modules` are tracked | |
 | Secrets in history | a `.env` file was deleted but is still in an old commit | |
 
-pushready only reports file **names**. It never prints, stores or sends the contents of any file, and it makes no network calls.
+## What it reads
+
+pushready is designed to look at as little as possible:
+
+- **File names and paths** in the folder and in git (`git ls-files`, and the paths added in past commits).
+- **Only three files are opened:** README, LICENSE and `.gitignore`, to check that they're filled in.
+- **Never opened:** `.env` files, keys, source code or any other file. A committed `.env` is reported by its name only.
+- **Never read:** commit authors, emails, messages or dates. pushready only asks git for file paths.
+- **Never sent or stored:** it makes no network calls and writes nothing to disk.
+
+A repository can still contain personal data in files pushready doesn't open. pushready can tell you that a risky *file* exists, but it doesn't scan what's inside. For that, use a dedicated secret scanner such as gitleaks.
+
+**If a secret was ever pushed, deleting it isn't enough.** Removing it from git history helps, but anyone who already cloned or cached the repo still has it. Treat the key as compromised: revoke or rotate it first.
 
 ## How it's tested
 
@@ -127,7 +139,17 @@ pushready only reports file **names**. It never prints, stores or sends the cont
 
 ## Roadmap
 
-Next up: a pre-push git hook and `pushready fix`. See [ROADMAP.md](ROADMAP.md) for the full plan.
+| Version | Focus |
+|---|---|
+| ✅ v0.1 | First checks: README, LICENSE, `.gitignore`, committed `.env` / `node_modules`, secrets in history |
+| v0.2 | Git-history exposure: what risky files are in history, since when, and whether they were already pushed, plus a rotate-then-clean guide |
+| v0.3 | Check framework: every check is a module with an id, severity and fix plan; structured `--json` findings |
+| v0.4 | Pre-push git hook that blocks a bad push |
+| v0.5 | `pushready fix`: safe, previewed fixes |
+| v0.6 | More checks: keys, databases, large files, build output, junk files |
+| v1.0 | Custom checks from a local file, npm package, Python and .NET support, GitHub Action |
+
+See [ROADMAP.md](ROADMAP.md) for the details and what "done" means for each.
 
 ## License
 
