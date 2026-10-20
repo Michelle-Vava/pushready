@@ -53,7 +53,7 @@ The tools I found either looked for secrets only, needed configuration, or had b
 ## Who it's for
 
 - **Students and new developers** pushing their first projects, who don't yet know what shouldn't go into git.
-- **Solo developers** about to make a private repo public, or share it for a job application, portfolio or submission.
+- **Solo developers** about to make a private repo public, or share it for a job application or portfolio.
 - **Teams and maintainers** who want a quick safety net in CI so a `.env` or `node_modules` never gets merged.
 
 ## How it helps
