@@ -1,0 +1,31 @@
+{
+  "name": "pushready",
+  "version": "0.1.0",
+  "description": "Check a repository for common mistakes before you push it or make it public.",
+  "type": "module",
+  "bin": {
+    "pushready": "src/cli.js"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/cli.js",
+    "demo": "node scripts/demo.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "git",
+    "cli",
+    "lint",
+    "repository",
+    "gitignore",
+    "dotenv",
+    "license"
+  ],
+  "author": "Michelle Vava",
+  "license": "MIT"
+}
