@@ -57,6 +57,8 @@ Every feature has to keep these true:
 
 - [ ] **Check registration:** each check is a module with `id`, `title`, `severity` (`blocker` / `warning` / `info`), `appliesTo(repo)` and `run(repo)`
 - [ ] **Shared repo snapshot:** tracked paths, history paths and refs are collected once and passed to every check, so checks stay fast and can't touch anything else
+- [ ] **Structured findings:** every check returns the same shape: rule `id`, `severity`, `message` (what's wrong and why it matters), `fix` (suggested next step) and the file paths involved
+- [ ] **Declared privacy boundary:** each check declares what it inspects (file names, git paths, or one of the three allowed files), and a test fails if a check reads anything else, so the "What it reads" section in the README stays true as checks are added
 - [ ] **Finding classification:** results grouped into "Fix before making public" (blockers) and "Good practice", with a one-line verdict: `Ready to make public: no (2 blockers)`
 - [ ] **Fix plans:** a check can return a list of proposed actions as data, with nothing run yet (used by `fix` in v0.5)
 - [ ] `--json` output with a documented, versioned schema; `--quiet`, `--strict`, `--only` / `--skip <check>`
