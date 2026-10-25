@@ -9,7 +9,7 @@ pushready is a **local, zero-setup checker** for the mistakes people make before
 Every feature has to keep these true:
 
 1. **Zero setup.** It works with no config, no install step beyond Node, and no account.
-2. **Look at as little as possible.** Work from file names and git paths. Never open `.env` files, keys or source code, never read commit authors or emails, never make network calls, never store or send anything. The only files opened are README, LICENSE and `.gitignore`.
+2. **Look at as little as possible.** Work from file names, git paths, commit hashes and ref names. Never open `.env` files, keys, databases or source code, never read commit authors, emails, messages or dates, never make network calls, never store or send anything. Only ordinary project files are ever opened, and only when a check needs them: today README, LICENSE and `.gitignore`, plus project metadata such as `package.json`.
 3. **Plain English.** Every finding says what it means and the exact fix.
 4. **Safe by default.** Nothing changes on disk or in git without showing the change and asking first.
 5. **Honest about limits.** Say clearly what a check can't guarantee (for example, that cleaning history doesn't un-leak a key).
@@ -25,28 +25,43 @@ Every feature has to keep these true:
 - [x] `.gitignore` present and covering `.env` / `node_modules`
 - [x] Committed `.env` files (templates like `.env.example` are allowed)
 - [x] Committed `node_modules`
-- [x] `.env` files deleted but still in git history
+- [x] `.env` files deleted but still in git history, reported as *unknown* rather than passing when the clone is shallow
 - [x] Tests that build throwaway git repos for each case
 - [x] `npm run demo`: builds a repo full of mistakes and checks it
 - [x] CI on Windows, macOS and Linux (Node 20 and 24)
 
 ---
 
-## v0.2: Git-history exposure
+## ✅ v0.2: Git-history exposure (done)
 
 **Goal:** show exactly what risky files are in history and how exposed they are.
 **Why:** this is pushready's strongest difference. Deleting a file doesn't remove it from history, and most people don't know which of their old commits leak what.
 
-- [ ] Find risky files anywhere in history, not just `.env`: `*.pem`, `*.key`, `id_rsa`, `*.p12`, `credentials.json`, `service-account*.json`, `*.sqlite3` / `*.db`
-- [ ] For each one: the commit and date it was added, whether it's still in the latest commit, and which branches still contain it (all from paths and refs, never file contents)
-- [ ] **Already pushed?** Check whether those commits are on a remote-tracking branch (`origin/...`), using local git data only. "Only on your machine" and "already pushed" need very different advice.
-- [ ] **Exposure guide**, in this order:
-  1. If it was pushed, **revoke or rotate the credential first**. Cleaning history doesn't un-leak it from clones, forks or caches.
-  2. Remove it from history with `git filter-repo`, with the exact command for the files found.
-  3. Force-push, ask collaborators to re-clone, and (on GitHub) contact support to purge cached pull request refs.
-- [ ] Never offer an automatic history rewrite; the user runs those commands.
+- [x] Find risky files anywhere in history, not just `.env`, grouped into three categories with a check each, all run by default:
+  - `history-keys` (fail): `id_rsa` / `id_dsa` / `id_ecdsa` / `id_ed25519`, `*.pem`, `*.key`, `*.p12`, `*.pfx`
+  - `history-credentials` (fail): `.env*`, `credentials.json`, `service-account*.json`, `.netrc`
+  - `history-data` (warn): `*.sqlite`, `*.sqlite3`, `*.db`
+  - **Rule for adding a pattern:** a name commonly used for secrets or personal data is flagged even though pushready can't confirm what's inside. Findings are worded as a prompt to check, never as proof of a leak. Names that are public by convention (`*.pub`, `*.crt`, `*.cer`, `Thumbs.db`) are excluded.
+- [x] For each one, one short line: the branch, whether it's still in the repo, and how exposed it is. Commit hashes and full branch lists are kept behind `--history` so the default output stays readable (from paths, hashes and refs only — never file contents, and never commit dates or authors, per principle 2)
+- [x] **Already pushed?** Checked from remote-tracking branches using local git data only, and reported as one of three states, because they need different advice:
+  - `pushed` — the commit is on a remote-tracking branch; rotate first
+  - `local only` — the repo has no remote at all; the strongest safe claim
+  - `not on a remote` — remotes exist but don't have it. Hedged, because remote-tracking refs are only as fresh as the last `git fetch`, so the fix text says to fetch if unsure
+- [x] **Exposure guide**, printed once after the findings, with the steps built from what was actually found:
+  1. If it was pushed, **revoke or rotate the credential first**. Cleaning history doesn't un-leak it from clones, forks or caches. If nothing was pushed, it says so instead of asking for a rotation that isn't needed.
+  2. A separate step for data files, which can't be rotated.
+  3. Remove it from history with `git filter-repo`, with the exact command for the files found. Paths are double-quoted (the same in bash, `cmd` and PowerShell); paths that can't be quoted safely, or more than eight of them, fall back to `--paths-from-file`.
+  4. Force-push and ask collaborators to re-clone — only shown when something was actually pushed. `--history` adds the GitHub Support step for cached pull request refs.
+- [x] Never offer an automatic history rewrite; the user runs those commands. Stated in `--help` and in the guide itself.
 
-**Done when:** test repos cover "committed but never pushed", "pushed then deleted" and "on one branch only", each giving the right advice.
+Added during v0.2, beyond the original list:
+
+- [x] **`.gitignore` is explained against history.** When a risky file in history is already listed in `.gitignore`, say plainly that this neither untracks it nor removes it from history, and give the `git rm --cached` command when it's still tracked. This is the most common wrong fix.
+- [x] **One clear warning when the history can't be fully checked.** Shallow clones *and* single-branch clones, reported once with the command that fixes each, instead of a repeated message under every category.
+- [x] **Acknowledged findings.** `.pushready.json` in the repo accepts findings you've already judged. They stay in the output marked *acknowledged* with the reason, drop out of the guide, and stop failing the run. Acknowledging one path never excuses another. (This brings a slice of v1.0's config forward: the need arrived as soon as checks got broad enough to hit test fixtures.)
+- [x] **Exit codes by exposure:** `0` clean or all acknowledged, `1` problems but nothing pushed, `2` something was pushed, `64` wrong usage. CI can tell an emergency from a two-minute fix.
+
+**Done when:** test repos cover "committed but never pushed", "pushed then deleted" and "on one branch only", each giving the right advice. ✅ All three covered, plus a shallow clone, a single-branch clone, a `.gitignore`-too-late repo and an acknowledged fixture.
 
 ---
 

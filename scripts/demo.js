@@ -1,41 +1,42 @@
-// Builds a throwaway repo with common mistakes and runs pushready on it.
-import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+// Builds throwaway repos covering different project types and git situations, and
+// runs pushready on each one.
+//
+//   npm run demo                  every scenario
+//   npm run demo -- pushed-history  just one
+//   npm run demo -- --history     with the detailed history output
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { SCENARIOS, buildScenario } from './scenarios.js';
 
-const dir = mkdtempSync(join(tmpdir(), 'pushready-demo-'));
-const git = (...args) =>
-  execFileSync('git', ['-c', 'user.name=demo', '-c', 'user.email=demo@example.com', ...args], { cwd: dir, stdio: 'ignore' });
-const write = (path, content) => {
-  mkdirSync(join(dir, path, '..'), { recursive: true });
-  writeFileSync(join(dir, path), content);
-};
+const cli = fileURLToPath(new URL('../src/cli.js', import.meta.url));
+const args = process.argv.slice(2);
+const detailed = args.includes('--history');
+const wanted = args.filter((a) => !a.startsWith('-'));
 
-try {
-  git('init', '-q');
-  write('README.md', '# my-app\n');
-  write('package.json', '{ "name": "my-app" }\n');
-  write('.gitignore', 'dist\n');
-  write('index.js', 'console.log("hi");\n');
-  write('node_modules/left-pad/index.js', '');
-  write('.env', 'API_KEY=not-a-real-key\n');
-  write('.env.local', 'DB_PASSWORD=not-a-real-password\n');
-  git('add', '-A', '-f');
-  git('commit', '-q', '-m', 'first commit');
-  // "Fix" one mistake the common wrong way: delete the file but leave it in history.
-  git('rm', '-q', '.env.local');
-  git('commit', '-q', '-m', 'remove .env.local');
+const chosen = wanted.length ? SCENARIOS.filter((s) => wanted.includes(s.name)) : SCENARIOS;
+if (!chosen.length) {
+  console.error(`No such scenario. Available: ${SCENARIOS.map((s) => s.name).join(', ')}`);
+  process.exit(2);
+}
 
-  console.log('Demo repo: README too short, no LICENSE, .gitignore missing entries,');
-  console.log('.env and node_modules committed, .env.local deleted but still in history.');
-
-  const cli = new URL('../src/cli.js', import.meta.url);
-  const { status } = spawnSync(process.execPath, [cli.pathname.replace(/^\/(\w:)/, '$1'), dir], { stdio: 'inherit' });
-  if (status !== 1) {
-    console.error(`Expected pushready to exit with 1, got ${status}`);
-    process.exitCode = 1;
+let failures = 0;
+for (const scenario of chosen) {
+  console.log(`\n${'═'.repeat(72)}\n${scenario.name} — ${scenario.title}\n${'═'.repeat(72)}`);
+  const { dir, cleanup } = buildScenario(scenario);
+  try {
+    const started = Date.now();
+    const { status } = spawnSync(process.execPath, [cli, dir, ...(detailed ? ['--history'] : [])], { stdio: 'inherit' });
+    console.log(`  (checked in ${Date.now() - started} ms)`);
+    if (status !== scenario.expect) {
+      console.error(`  Expected exit code ${scenario.expect}, got ${status}`);
+      failures++;
+    }
+  } finally {
+    cleanup();
   }
-} finally {
-  rmSync(dir, { recursive: true, force: true });
+}
+
+if (failures) {
+  console.error(`\n${failures} scenario(s) did not behave as described.`);
+  process.exitCode = 1;
 }

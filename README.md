@@ -22,13 +22,35 @@ Checking /home/me/my-app
       → Run "git rm --cached <file>", add it to .gitignore, and rotate any keys it held. Commit a .env.example instead.
   ✖ node_modules is committed (1 file)
       → Run "git rm -r --cached node_modules" and add node_modules to .gitignore.
-  ✖ Deleted, but still in git history: .env.local
-      → Anyone can read old commits. Rotate the keys, then remove the file from history (e.g. git filter-repo) before making the repo public.
+  ✔ No private key files in git history
+  ✖ 1 credential file in git history
+      .env.local — deleted, on main, local only
+      → These names are normally used for logins or API tokens. Rotate anything that was real, then remove the file from history (e.g. git filter-repo) — deleting it in a later commit does not remove it.
+  ! 1 data file in git history
+      dev.sqlite3 — still in the repo, on main, local only
+      → These names are normally used for databases, which may hold personal data. Check what is in it: unlike a key, leaked data cannot be rotated, so you may need to tell the people affected.
 
-  0 passed, 2 warnings, 4 failed
+  1 passed, 3 warnings, 4 failed
 ```
 
-*This is the real output of `npm run demo` (see [Try it](#try-it)).*
+*This is the real output of `npm run demo -- messy-node` (see [Try it](#try-it)).*
+
+Each risky file gets one short line: **where it is, whether it's still there, and how exposed it is** — `local only`, `not on a remote`, or `pushed`. "Pushed" is the one that changes what you should do first.
+
+When something is found in history, pushready prints a short **What to do next** guide built from what it actually found — it only asks you to rotate a credential if it was really pushed, and only mentions force-pushing if there's a remote to force-push to:
+
+```
+  What to do next
+    1. Rotate or revoke these now: service-account-prod.json.
+       They were pushed, so cleaning history will not un-leak them from clones, forks or caches.
+    2. Remove them from history yourself — pushready will not do it for you:
+       git filter-repo --invert-paths --path "service-account-prod.json"
+    3. Force-push the rewritten history, and ask every collaborator to re-clone.
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Run again with --history for the full guide.
+```
+
+**pushready never runs any of this.** It doesn't edit files, delete anything or rewrite history — the commands are printed for you to run. `--history` adds commit hashes, every branch involved, how to install `git filter-repo`, and the GitHub Support step for cached pull request refs.
 
 ## Why
 
@@ -91,12 +113,18 @@ Needs Node.js 18 or newer and git. There are no dependencies to install.
 git clone https://github.com/Michelle-Vava/pushready.git
 cd pushready
 
-# 1. See it catch problems: builds a throwaway repo full of mistakes and checks it
+# 1. See it catch problems: builds throwaway repos covering different project
+#    types and git situations, and checks each one
 npm run demo
 
-# 2. Check one of your own projects
+# 2. Just one of them, with the detailed history output
+npm run demo -- pushed-history --history
+
+# 3. Check one of your own projects
 npm start -- path/to/your/project
 ```
+
+The demo scenarios are `clean-node`, `clean-python`, `messy-node`, `messy-python`, `deleted-local`, `pushed-history`, `branch-only`, `gitignored-too-late`, `acknowledged`, `shallow` and `large` (600 files over 40 commits). Each one declares the exit code it should produce, so `npm run demo` also checks they still behave as described.
 
 To use it as a command anywhere on your machine:
 
@@ -105,7 +133,43 @@ npm link
 pushready path/to/your/project
 ```
 
-The exit code is `1` if any check fails, so it can be used in scripts and CI.
+| Option | What it does |
+|---|---|
+| `--history` | show each risky file as a labelled block — commit, branches, remotes, `.gitignore` status — plus the full exposure guide |
+| `-h`, `--help` | show usage |
+| `-v`, `--version` | show the version |
+
+**Exit codes** tell a script how urgent the problem is, so CI can treat a leaked-and-pushed key differently from one that never left the machine:
+
+| Code | Means |
+|---|---|
+| `0` | nothing to fix, or everything found was acknowledged |
+| `1` | problems found, but nothing has been pushed from this clone |
+| `2` | problems found, and at least one was already pushed — rotate first |
+| `64` | pushready was used wrongly (for example, the path is not a folder) |
+
+## Acknowledging a finding
+
+Some findings are fine once you've looked at them — a test fixture named `dummy.pem`, say. Put a `.pushready.json` in the repo to accept them:
+
+```json
+{
+  "acknowledge": [
+    { "path": "test/fixtures/dummy.pem", "reason": "fixture for the TLS tests, never a real key" }
+  ]
+}
+```
+
+Acknowledged findings **stay in the output**, marked `acknowledged` with your reason, and drop out of the "What to do next" guide. They no longer fail the run. Nothing is hidden: the point is to record that you decided, not to make the finding disappear. Acknowledging one path doesn't excuse any other.
+
+## .gitignore and files git already has
+
+Adding a file to `.gitignore` is the most common wrong fix, because it doesn't undo anything git has already recorded:
+
+- it does **not** untrack a file git is already tracking — `git rm --cached` does that
+- it does **not** remove anything from history
+
+pushready spots this. When a risky file in your history is already listed in `.gitignore`, it says so and gives you the untracking command alongside the history rewrite.
 
 ## What it checks
 
@@ -116,16 +180,27 @@ The exit code is `1` if any check fails, so it can be used in scripts and CI.
 | .gitignore | there is none | it doesn't ignore `.env`, or `node_modules` in a Node project |
 | Committed secrets | a `.env` / `.env.*` file is tracked (`.env.example` is fine) | |
 | Committed dependencies | files under `node_modules` are tracked | |
-| Secrets in history | a `.env` file was deleted but is still in an old commit | |
+| Private keys in history | a name like `id_rsa`, `*.pem`, `*.key`, `*.p12` or `*.pfx` is anywhere in history | |
+| Credential files in history | a name like `.env*`, `credentials.json`, `service-account*.json` or `.netrc` is anywhere in history | |
+| Database files in history | | a name like `*.sqlite3` or `*.db` is anywhere in history |
+
+| Git history available | | only part of the history can be checked (shallow or single-branch clone) |
+
+The three history checks match on **file names only**, because pushready never opens these files. A match means "this name is normally used for a private key", not "this file definitely holds a secret" — it's a prompt to go and check. Names that are public by convention (`*.pub`, `*.crt`, `*.cer`, `Thumbs.db`) and templates like `.env.example` are not flagged.
+
+Database files warn rather than fail: unlike a key, leaked data can't be rotated, so it needs your judgement rather than a standard fix.
+
+The history checks need the full history. If the clone is shallow (`git clone --depth`, or `actions/checkout` without `fetch-depth: 0`) or covers only one branch (`--single-branch`), the other commits aren't on your machine. pushready says so in one line and reports the history checks as **could not be checked** rather than passing them — a clean result you can't trust is worse than no result.
 
 ## What it reads
 
 pushready is designed to look at as little as possible:
 
 - **File names and paths** in the folder and in git (`git ls-files`, and the paths added in past commits).
-- **Only three files are opened:** README, LICENSE and `.gitignore`, to check that they're filled in.
-- **Never opened:** `.env` files, keys, source code or any other file. A committed `.env` is reported by its name only.
-- **Never read:** commit authors, emails, messages or dates. pushready only asks git for file paths.
+- **Commit hashes and branch names**, to say which commit and which branches a file is in. A commit is only ever identified by its hash.
+- **Ordinary project files, only when a check needs them.** Today that is README, LICENSE and `.gitignore`, to check they're filled in, and `.pushready.json` for findings you have acknowledged. Project metadata such as `package.json` may be opened by a check that needs it.
+- **Never opened:** `.env` files, keys, databases, source code, or anything else that could hold a secret or personal data. A risky file is always reported by its name alone.
+- **Never read:** commit authors, emails, messages or dates.
 - **Never sent or stored:** it makes no network calls and writes nothing to disk.
 
 A repository can still contain personal data in files pushready doesn't open. pushready can tell you that a risky *file* exists, but it doesn't scan what's inside. For that, use a dedicated secret scanner such as gitleaks.
@@ -134,7 +209,7 @@ A repository can still contain personal data in files pushready doesn't open. pu
 
 ## How it's tested
 
-- `npm test` runs 8 tests with Node's built-in test runner. Each test builds a throwaway git repo in your temp folder (clean, missing files, committed `.env`, secrets left in history, and so on) and checks the result.
+- `npm test` runs 28 tests with Node's built-in test runner. Each test builds a throwaway git repo in your temp folder (clean, missing files, committed `.env`, risky files left in history, never pushed, pushed then deleted, on one branch only, a shallow clone, and so on) and checks the result. Pushing is tested against a local bare repo, so the tests stay offline.
 - GitHub Actions runs the tests, the demo, and pushready on its own repo on **Windows, macOS and Linux** with Node 20 and 24 on every push.
 
 ## Roadmap
@@ -142,11 +217,11 @@ A repository can still contain personal data in files pushready doesn't open. pu
 | Version | Focus |
 |---|---|
 | ✅ v0.1 | First checks: README, LICENSE, `.gitignore`, committed `.env` / `node_modules`, secrets in history |
-| v0.2 | Git-history exposure: what risky files are in history, since when, and whether they were already pushed, plus a rotate-then-clean guide |
+| ✅ v0.2 | Git-history exposure: what risky files are in history, which commits and branches hold them, and whether they were already pushed, plus a rotate-then-clean guide |
 | v0.3 | Check framework: every check is a module with an id, severity and fix plan; structured `--json` findings |
 | v0.4 | Pre-push git hook that blocks a bad push |
 | v0.5 | `pushready fix`: safe, previewed fixes |
-| v0.6 | More checks: keys, databases, large files, build output, junk files |
+| v0.6 | More checks: large files, build output, junk files, template README text, `package.json` basics |
 | v1.0 | Custom checks from a local file, npm package, Python and .NET support, GitHub Action |
 
 See [ROADMAP.md](ROADMAP.md) for the details and what "done" means for each.
