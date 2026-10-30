@@ -38,8 +38,8 @@ Every feature has to keep these true:
 **Why:** this is pushready's strongest difference. Deleting a file doesn't remove it from history, and most people don't know which of their old commits leak what.
 
 - [x] Find risky files anywhere in history, not just `.env`, grouped into three categories with a check each, all run by default:
-  - `history-keys` (fail): `id_rsa` / `id_dsa` / `id_ecdsa` / `id_ed25519`, `*.pem`, `*.key`, `*.p12`, `*.pfx`
-  - `history-credentials` (fail): `.env*`, `credentials.json`, `service-account*.json`, `.netrc`
+  - `history-keys` (fail): `id_rsa` / `id_dsa` / `id_ecdsa` / `id_ed25519`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.ppk`
+  - `history-credentials` (fail): `.env*`, `credentials.json`, `service-account*.json`, `.netrc`, `kubeconfig`, `.pgpass`, `*.tfstate`
   - `history-data` (warn): `*.sqlite`, `*.sqlite3`, `*.db`
   - **Rule for adding a pattern:** a name commonly used for secrets or personal data is flagged even though pushready can't confirm what's inside. Findings are worded as a prompt to check, never as proof of a leak. Names that are public by convention (`*.pub`, `*.crt`, `*.cer`, `Thumbs.db`) are excluded.
 - [x] For each one, one short line: the branch, whether it's still in the repo, and how exposed it is. Commit hashes and full branch lists are kept behind `--history` so the default output stays readable (from paths, hashes and refs only — never file contents, and never commit dates or authors, per principle 2)
@@ -59,6 +59,11 @@ Added during v0.2, beyond the original list:
 - [x] **`.gitignore` is explained against history.** When a risky file in history is already listed in `.gitignore`, say plainly that this neither untracks it nor removes it from history, and give the `git rm --cached` command when it's still tracked. This is the most common wrong fix.
 - [x] **One clear warning when the history can't be fully checked.** Shallow clones *and* single-branch clones, reported once with the command that fixes each, instead of a repeated message under every category.
 - [x] **Acknowledged findings.** `.pushready.json` in the repo accepts findings you've already judged. They stay in the output marked *acknowledged* with the reason, drop out of the guide, and stop failing the run. Acknowledging one path never excuses another. (This brings a slice of v1.0's config forward: the need arrived as soon as checks got broad enough to hit test fixtures.)
+- [x] **Renames are followed, in detection and in the fix.** Every name a file was ever committed under is checked, and the `git filter-repo` command names all of them — removing only the risky-looking name leaves the same content in history under the others. Exposure is judged on the content too, so a file pushed under an earlier name counts as pushed.
+- [x] **The advice matches where the file actually is.** A branch or tag is history and gets the `filter-repo` command. A stash (every stash, not only the newest), a leftover ref like `refs/original/`, or a detached HEAD is not, and gets `git stash drop` / `git update-ref -d` / "check out a branch" instead — never a history rewrite for something that isn't history. A file only on a tag carries a warning that this clone cannot tell whether tags were pushed.
+- [x] **Commits nothing points at are searched too.** A secret amended away, committed on a branch that was later deleted, or put in a stash that was then dropped is still on disk and still recoverable. Found via `--reflog` and `git fsck --unreachable`, and given the matching fix (`git reflog expire` + `git gc`) rather than a history rewrite.
+- [x] **Anything that cannot be checked is declared**, never silently passed: shallow and single-branch clones, submodules (a separate repository the checks cannot see into), and a failed unreachable-commit search.
+- [x] **Name matching is case-insensitive throughout**, so `.ENV` is caught as well as `.env`, and the pattern lists cover `*.jks`, `*.keystore`, `*.ppk`, `kubeconfig`, `.pgpass` and `*.tfstate`.
 - [x] **Exit codes by exposure:** `0` clean or all acknowledged, `1` problems but nothing pushed, `2` something was pushed, `64` wrong usage. CI can tell an emergency from a two-minute fix.
 
 **Done when:** test repos cover "committed but never pushed", "pushed then deleted" and "on one branch only", each giving the right advice. ✅ All three covered, plus a shallow clone, a single-branch clone, a `.gitignore`-too-late repo and an acknowledged fixture.
@@ -70,15 +75,72 @@ Added during v0.2, beyond the original list:
 **Goal:** turn the built-in checks into a small framework that other features (and later, other people) build on.
 **Why:** the hook, `fix`, JSON output and custom checks all need the same shape for a check and a finding.
 
-- [ ] **Check registration:** each check is a module with `id`, `title`, `severity` (`blocker` / `warning` / `info`), `appliesTo(repo)` and `run(repo)`
-- [ ] **Shared repo snapshot:** tracked paths, history paths and refs are collected once and passed to every check, so checks stay fast and can't touch anything else
-- [ ] **Structured findings:** every check returns the same shape: rule `id`, `severity`, `message` (what's wrong and why it matters), `fix` (suggested next step) and the file paths involved
-- [ ] **Declared privacy boundary:** each check declares what it inspects (file names, git paths, or one of the three allowed files), and a test fails if a check reads anything else, so the "What it reads" section in the README stays true as checks are added
-- [ ] **Finding classification:** results grouped into "Fix before making public" (blockers) and "Good practice", with a one-line verdict: `Ready to make public: no (2 blockers)`
-- [ ] **Fix plans:** a check can return a list of proposed actions as data, with nothing run yet (used by `fix` in v0.5)
-- [ ] `--json` output with a documented, versioned schema; `--quiet`, `--strict`, `--only` / `--skip <check>`
+*Rewritten 29 Oct 2026.* The original plan was written before v0.2's three fix rounds, and two things they proved change the shape: **remediation is cross-cutting** (the guide merges findings from several checks into one ordered set of steps and one `filter-repo` command, and branches on where a *finding* lives, not which check made it), and **checks are not independent** (`env-tracked` deliberately suppresses what `history-credentials` would otherwise repeat, and acknowledgement applies across all of them). A per-check `fix` string cannot express the first; putting suppression inside a check breaks the second the moment `--skip` exists. So: findings and fix plans are separate layers, and suppression and acknowledgement are policy applied over findings, not inputs to them.
 
-**Done when:** all v0.1 and v0.2 checks run through the framework, and the JSON schema is documented and tested.
+*Re-planned 30 Oct 2026* as point releases, each with its own completion criteria. v0.3.0 is cut at the two stages that changed no behaviour. **v0.3.1 fixes what a review of v0.3.0 found before anything new is built on it.** Every `TODO(v0.3.x)` comment in `src/` is tied to one of the releases below.
+
+### ✅ v0.3.0 — module split and shared snapshot (30 Oct 2026)
+
+- [x] **Module split, no behaviour change.** `checks.js` (772 lines) split into `patterns.js`, `git.js`, `history.js`, `acknowledge.js`, `guide.js`, `text.js` and a `checks.js` of checks and `runChecks`.
+- [x] **Shared lazy snapshot.** Checks receive a memoised, read-only view of the repository instead of `dir`, and declare in `reads` which fields they use. Nothing is read until asked: file-only checks spawn no git process, and the three history checks share one walk (16 processes instead of 30). `index.js` is the public surface.
+- [x] **Privacy boundary enforced, not declared.** A test fences every check to its `reads` list and fails on an undeclared read. The snapshot refuses to open any file outside README, LICENSE, `.gitignore`, `package.json` and `.pushready.json`.
+
+**Done when — met:** 52 tests pass; 15 scenarios exit as declared; the CLI's output before and after each stage was compared on every scenario, `--history` and plain (32 and 34 comparisons, 0 differences); removing a field from a check's `reads` fails the suite; `snapshot.readFile('.env')` throws.
+
+### v0.3.1 — close the gaps found in v0.3.0 (no new features)
+
+A review of the shipped code, looking for what is *wrong* rather than what is *missing*. Nothing here adds a flag, a check or an output format. Each item gets a test that fails before the fix.
+
+- [ ] **Severity and status are one field, and should be two.** `RISKY_CATEGORIES[].status` is `'fail'` / `'warn'` — a *severity* (fixed per check) named and used as a *status* (what happened this run). Rename to `severity`; results carry both. Without this there is no way to say "a blocker that passed" or "a blocker that was acknowledged", which `--strict`, `--json` and the verdict all need.
+- [ ] **A policy pass over results**, after the checks and before the report. Suppression (a tracked `.env` is reported once, by `env-tracked`) moves out of `snapshot.risky()`; acknowledgement moves out of the history checks. Consequence worth having: `.pushready.json` then also applies to `env-tracked` and `node-modules-tracked`, which it cannot today — a tracked fixture `.env` is unacknowledgeable.
+- [ ] **`git fsck` runs twice per run.** Once to find unreachable commits, once more just to learn whether it works. It is the slowest call pushready makes (2 of 11 processes on a clean repo). Run it once.
+- [ ] **The guide hardcodes category ids.** `['history-keys', 'history-credentials']` and `['history-data']` are written into `exposureGuide`, so a fourth category would be silently left out of the advice. Derive the grouping from category metadata.
+- [ ] **The tag hedge covers credentials only.** A data file that is only on a tag gets the plain "probably never left your machine" line.
+- [ ] **The acknowledged heading ignores where the file is.** "2 private key files in git history, acknowledged" is printed even when both are in a stash.
+- [ ] **Unknown flags are silently ignored.** `pushready . --hsitory` runs without detail and exits 0. Reject with 64 and name the flag.
+- [ ] **`skip` is missing from the summary.** A non-git folder lists six skipped checks and then says "0 passed, 1 warning, 2 failed".
+- [ ] **Check ids are not asserted unique.** One test, before v0.3.2 starts addressing checks by id.
+- [ ] **A `.gitignore` comment satisfies the `.gitignore` check.** `# remember to add .env` passes it. Only a rule should count: skip comment lines, and require a pattern that would actually match.
+
+**Done when:** every bullet has a test that was seen failing against v0.3.0; the side-by-side output comparison against v0.3.0 differs *only* in lines these fixes intentionally change, and that list is written in PROGRESS.md; `grep TODO(v0.3.1) src/` returns nothing; no new flag, check or output format exists.
+
+### v0.3.2 — registry metadata, the finding schema, and the first flags
+
+- [ ] Every check has `title`, `severity` (`blocker` / `warning` / `info`), `reads` and `appliesTo(snapshot)`.
+- [ ] **One finding shape**, documented: `{ id, title, severity, status, message, fix, items[] }`, keeping the two levels the output already relies on — a finding per check, evidence items (path, place, exposure, aliases, …) under it.
+- [ ] `--only <id>` / `--skip <id>`, selecting from the registry. The policy pass still runs, so skipping `env-tracked` does not hide a committed `.env`.
+- [ ] **The exit-code contract, written and tested.** v0.2's `0` / `1` / `2` / `64` are the base. Decide and test: does `--skip` of a failing check lower the code? Does `--only` narrow what can be reported? Does `unknown` ever fail? `--json` must not change the code. Stated in `--help`.
+- [ ] **`.pushready.json` gets a `version` field**, and a decision is recorded on which of v1.0's config items (turn checks off, change severity, ignore paths) land here in v0.3 versus stay flags-only. An older pushready meeting a newer file says so.
+
+**Done when:** `pushready --only readme` spawns no git process (asserted); every exit-code question above has a test; the finding shape is documented and a test asserts every check's output matches it; `.pushready.json` without `version` still works and one with an unknown version warns.
+
+### v0.3.3 — machine output and strictness
+
+- [ ] `--json`: the finding shape plus a top-level `{ version, dir, findings, guide, exit }`, documented and covered by a test that fails if the shape drifts.
+- [ ] `--quiet` (failures and warnings only) and `--strict` (per the v0.3.2 contract: what it promotes, and whether `unknown` fails).
+- [ ] **Classification and verdict:** findings grouped into "Fix before making public" (blockers) and "Good practice", with one line: `Ready to make public: no (2 blockers)`.
+
+**Done when:** `--json` output is byte-stable across two runs on the same repo and parses in CI without the text renderer; `--strict` is tested on `warn` and `unknown`; the verdict agrees with the exit code in every scenario.
+
+### v0.3.4 — remedies as rules
+
+- [ ] `exposureGuide` becomes an ordered list of rules — rotate, data, gitignore-too-late, drop stash, delete ref, expire unreachable, rewrite, force-push — each with `appliesTo(findings)` and `build(findings)`.
+
+**Done when:** the single function is gone; the side-by-side comparison against v0.3.3 shows 0 differences in guide output; each rule has its own test.
+
+### v0.3.5 — fix plans as data
+
+- [ ] Rules return actions, `{ kind: 'run' | 'edit' | 'manual', … }`, not strings. The text renderer prints them as today; `--json` carries them.
+
+**Done when:** no remedy returns a bare string; a test asserts a full run spawns no process and writes no file beyond what v0.3.0 did; `--json` includes `actions` for every step.
+
+### v0.3 as a whole — done when
+
+- All v0.1 and v0.2 checks run through the snapshot, the registry and the policy pass, and `grep TODO(v0.3` in `src/` returns nothing.
+- The finding schema, the JSON schema and the exit-code contract are each documented in one place and each guarded by a test.
+- A check that reads an undeclared snapshot field, or opens a file outside the allowlist, fails the suite.
+- `exposureGuide` no longer exists as one function, and the guide's output is unchanged from v0.3.0 except for the v0.3.1 fixes listed in PROGRESS.md.
+- Every point release above has its "Done when" ticked in this file.
 
 ---
 

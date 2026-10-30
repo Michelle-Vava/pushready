@@ -181,6 +181,98 @@ export const SCENARIOS = [
     },
   },
   {
+    name: 'renamed-secret',
+    title: 'Secrets that were renamed, in and out of a risky name',
+    expect: 1,
+    build(r) {
+      r.write('README.md', README);
+      r.write('LICENSE', MIT);
+      r.write('.gitignore', 'node_modules\n.env\n');
+      r.write('package.json', '{ "name": "app" }\n');
+      r.write('notes/config.json', '{"not": "real"}\n');
+      r.write('deploy/id_rsa', 'not-a-real-key\n');
+      r.commit('first commit');
+      // A tidy-up that turns an innocent name into a risky one. git records this
+      // as a rename, so the new name is never "added" in the usual sense.
+      r.git('mv', 'notes/config.json', 'credentials.json');
+      r.commit('move config to the root');
+      // The other direction: renaming a key does not hide it, because the old
+      // name is still the one it was committed under.
+      r.git('mv', 'deploy/id_rsa', 'deploy/key.backup');
+      r.commit('rename the deploy key');
+    },
+  },
+  {
+    name: 'stash-only',
+    title: 'A key that only ever went into a stash: drop it, do not rewrite history',
+    expect: 1,
+    build(r) {
+      r.write('README.md', README);
+      r.write('LICENSE', MIT);
+      r.write('.gitignore', 'node_modules\n.env\n');
+      r.write('package.json', '{ "name": "app" }\n');
+      r.commit('first commit');
+      r.push();
+      // Staged, then stashed to "put it aside". It never reached a commit on a
+      // branch, and a stash cannot be pushed — but it is still on the machine.
+      r.write('deploy.pem', 'not-a-real-key\nline 2\nline 3\nline 4\n');
+      r.git('add', 'deploy.pem');
+      r.git('stash', '-q');
+      // A second stash on top, so the key sits in stash@{1}, which "git log --all"
+      // cannot see: only the newest stash is a ref.
+      r.write('notes.txt', 'wip\n');
+      r.git('stash', '-q', '-u');
+    },
+  },
+  {
+    name: 'tag-only',
+    title: 'A key on a tag whose branch was deleted: still history, and tags may have been pushed',
+    expect: 1,
+    build(r) {
+      r.write('README.md', README);
+      r.write('LICENSE', MIT);
+      r.write('.gitignore', 'node_modules\n.env\n');
+      r.write('package.json', '{ "name": "app" }\n');
+      r.commit('first commit');
+      r.push();
+      r.git('checkout', '-q', '-b', 'release');
+      r.write('release.pem', 'not-a-real-key\nline 2\nline 3\nline 4\n');
+      r.commit('add release key');
+      r.git('tag', 'v1.0');
+      r.git('checkout', '-q', 'main');
+      r.git('branch', '-q', '-D', 'release');
+    },
+  },
+  {
+    name: 'unreachable',
+    title: 'Secrets in commits nothing points at: amended away, deleted branch, dropped stash',
+    expect: 1,
+    build(r) {
+      r.write('README.md', README);
+      r.write('LICENSE', MIT);
+      r.write('.gitignore', 'node_modules\n.env\n');
+      r.write('package.json', '{ "name": "app" }\n');
+      r.commit('first commit');
+      // The classic "I fixed it with --amend" — which leaves the old commit on disk.
+      r.write('amended.pem', 'not-a-real-key\nline 2\nline 3\nline 4\n');
+      r.write('src/app.js', 'console.log("hi");\n');
+      r.commit('oops, committed a key');
+      r.git('rm', '-q', 'amended.pem');
+      r.git('commit', '-q', '--amend', '-m', 'add app');
+      // A branch deleted after the fact: the commit is still reachable via the reflog.
+      r.git('checkout', '-q', '-b', 'spike');
+      r.write('kubeconfig', 'not-a-real-cluster-token\n');
+      r.commit('spike on deploy');
+      r.git('checkout', '-q', 'main');
+      r.git('branch', '-q', '-D', 'spike');
+      // A dropped stash leaves the reflog entirely; only git fsck still finds it.
+      r.write('dropped.jks', 'not-a-real-keystore\nline 2\nline 3\nline 4\n');
+      r.git('add', 'dropped.jks');
+      r.git('stash', '-q');
+      r.git('stash', 'drop');
+    },
+  },
+  {
     name: 'acknowledged',
     title: 'A known test fixture, accepted in .pushready.json',
     expect: 0,

@@ -1,6 +1,6 @@
 {
   "name": "pushready",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Check a repository for common mistakes before you push it or make it public.",
   "type": "module",
   "bin": {
