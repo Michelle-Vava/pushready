@@ -1,0 +1,146 @@
+# no-commits — A brand new repository: files staged, nothing committed yet
+# expects exit 1
+
+=== pushready <repo> (exit 1) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✖ No LICENSE file
+      → Without a license nobody may legally reuse your code. See https://choosealicense.com
+  ✖ No .gitignore
+      → Add a .gitignore so build output, dependencies and .env files are not committed.
+  ✖ Secret file(s) staged, not yet committed: .env
+      → Run "git rm --cached <file>" and add it to .gitignore before you commit. It has never been in a commit, so nothing needs cleaning up. Commit a .env.example instead.
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✔ No private key files in git history
+  ✔ No credential files in git history
+  ✔ No data files in git history
+
+  Ready to make public: no (3 blockers)
+  6 passed, 0 warnings, 3 failed
+
+=== pushready <repo> --history (exit 1) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✖ No LICENSE file
+      → Without a license nobody may legally reuse your code. See https://choosealicense.com
+  ✖ No .gitignore
+      → Add a .gitignore so build output, dependencies and .env files are not committed.
+  ✖ Secret file(s) staged, not yet committed: .env
+      → Run "git rm --cached <file>" and add it to .gitignore before you commit. It has never been in a commit, so nothing needs cleaning up. Commit a .env.example instead.
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✔ No private key files in git history
+  ✔ No credential files in git history
+  ✔ No data files in git history
+
+  Ready to make public: no (3 blockers)
+  6 passed, 0 warnings, 3 failed
+
+=== pushready <repo> --json (exit 1) ===
+{
+  "version": "<version>",
+  "dir": "<repo>",
+  "findings": [
+    {
+      "id": "readme",
+      "title": "README",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "README.md found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "license",
+      "title": "LICENSE",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "No LICENSE file",
+      "fix": "Without a license nobody may legally reuse your code. See https://choosealicense.com",
+      "items": []
+    },
+    {
+      "id": "gitignore",
+      "title": ".gitignore",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "No .gitignore",
+      "fix": "Add a .gitignore so build output, dependencies and .env files are not committed.",
+      "items": []
+    },
+    {
+      "id": "env-tracked",
+      "title": "Committed secrets",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "Secret file(s) staged, not yet committed: .env",
+      "fix": "Run \"git rm --cached <file>\" and add it to .gitignore before you commit. It has never been in a commit, so nothing needs cleaning up. Commit a .env.example instead.",
+      "items": []
+    },
+    {
+      "id": "dependencies-tracked",
+      "title": "Committed dependencies",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No dependencies or build output committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-scope",
+      "title": "Git history available",
+      "severity": "info",
+      "status": "pass",
+      "message": "Full git history available",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-keys",
+      "title": "Private keys in history",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No private key files in git history",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-credentials",
+      "title": "Credential files in history",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No credential files in git history",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-data",
+      "title": "Database files in history",
+      "severity": "warning",
+      "status": "pass",
+      "message": "No data files in git history",
+      "fix": null,
+      "items": []
+    }
+  ],
+  "guide": null,
+  "verdict": {
+    "ready": false,
+    "exit": 1,
+    "blockers": 3,
+    "warnings": 0,
+    "unknown": 0,
+    "acknowledged": 0,
+    "skipped": 0,
+    "pushed": false,
+    "strict": false,
+    "line": "Ready to make public: no (3 blockers)"
+  },
+  "notRun": [],
+  "exit": 1
+}

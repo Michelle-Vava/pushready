@@ -1,0 +1,238 @@
+# branch-only — A key on one unpushed branch, with main already pushed
+# expects exit 1
+
+=== pushready <repo> (exit 1) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✖ 1 private key file in git history
+      certs/server.key — still in the repo, on feature/deploy, not on a remote
+      → These names are normally used for private keys. Deleting the file in a later commit does not remove it — see "What to do next" below.
+  ✔ No credential files in git history
+  ✔ No data files in git history
+
+  What to do next
+    1. None of these were pushed from this clone, so they probably never left your machine.
+       Run "git fetch" if you are not sure, and rotate anything you cannot account for.
+    2. Remove certs/server.key from history yourself — pushready will not do it for you:
+       git filter-repo --invert-paths --path "certs/server.key"
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Run again with --history for the full guide.
+
+  Ready to make public: no (1 blocker)
+  8 passed, 0 warnings, 1 failed
+
+=== pushready <repo> --history (exit 1) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✖ 1 private key file in git history
+      certs/server.key
+          status     still in the repo
+          exposure   not on a remote — a remote exists but does not have this commit (only as fresh as your last fetch)
+          added in   <sha>
+          branches   feature/deploy
+          remotes    none
+          gitignore  not listed
+      → These names are normally used for private keys. Deleting the file in a later commit does not remove it — see "What to do next" below.
+  ✔ No credential files in git history
+  ✔ No data files in git history
+
+  What to do next
+    1. None of these were pushed from this clone, so they probably never left your machine.
+       Run "git fetch" if you are not sure, and rotate anything you cannot account for.
+    2. Remove certs/server.key from history yourself — pushready will not do it for you:
+       git filter-repo --invert-paths --path "certs/server.key"
+       git filter-repo is not part of git; install it first.
+       Run it on a fresh clone. It refuses to rewrite a repo with other changes unless you pass --force,
+       and it removes the "origin" remote afterwards, so add it back before pushing.
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Docs: https://github.com/newren/git-filter-repo#how-do-i-install-it
+
+  Ready to make public: no (1 blocker)
+  8 passed, 0 warnings, 1 failed
+
+=== pushready <repo> --json (exit 1) ===
+{
+  "version": "<version>",
+  "dir": "<repo>",
+  "findings": [
+    {
+      "id": "readme",
+      "title": "README",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "README.md found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "license",
+      "title": "LICENSE",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "LICENSE found (MIT)",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "gitignore",
+      "title": ".gitignore",
+      "severity": "blocker",
+      "status": "pass",
+      "message": ".gitignore found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "env-tracked",
+      "title": "Committed secrets",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No .env files committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "dependencies-tracked",
+      "title": "Committed dependencies",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No dependencies or build output committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-scope",
+      "title": "Git history available",
+      "severity": "info",
+      "status": "pass",
+      "message": "Full git history available",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-keys",
+      "title": "Private keys in history",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "1 private key file in git history",
+      "fix": "These names are normally used for private keys. Deleting the file in a later commit does not remove it — see \"What to do next\" below.",
+      "items": [
+        {
+          "path": "certs/server.key",
+          "present": true,
+          "commit": "<sha>",
+          "branch": "feature/deploy",
+          "branches": [
+            "feature/deploy"
+          ],
+          "remotes": [],
+          "tags": [],
+          "refs": [],
+          "stashes": [],
+          "place": "branch",
+          "onCurrentBranch": true,
+          "exposure": "not on a remote",
+          "aliases": [],
+          "kind": "credential",
+          "ignored": false,
+          "acknowledged": false,
+          "reason": ""
+        }
+      ]
+    },
+    {
+      "id": "history-credentials",
+      "title": "Credential files in history",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No credential files in git history",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-data",
+      "title": "Database files in history",
+      "severity": "warning",
+      "status": "pass",
+      "message": "No data files in git history",
+      "fix": null,
+      "items": []
+    }
+  ],
+  "guide": {
+    "steps": [
+      {
+        "id": "rotate",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "None of these were pushed from this clone, so they probably never left your machine."
+          },
+          {
+            "kind": "manual",
+            "text": "Run \"git fetch\" if you are not sure, and rotate anything you cannot account for."
+          }
+        ]
+      },
+      {
+        "id": "rewrite",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "Remove certs/server.key from history yourself — pushready will not do it for you:"
+          },
+          {
+            "kind": "run",
+            "text": "git filter-repo --invert-paths --path \"certs/server.key\"",
+            "command": "git filter-repo --invert-paths --path \"certs/server.key\""
+          },
+          {
+            "kind": "manual",
+            "text": "git filter-repo is not part of git; install it first."
+          },
+          {
+            "kind": "manual",
+            "text": "Run it on a fresh clone. It refuses to rewrite a repo with other changes unless you pass --force,"
+          },
+          {
+            "kind": "manual",
+            "text": "and it removes the \"origin\" remote afterwards, so add it back before pushing."
+          }
+        ]
+      }
+    ],
+    "links": [
+      "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository",
+      "https://github.com/newren/git-filter-repo#how-do-i-install-it"
+    ],
+    "detailed": true
+  },
+  "verdict": {
+    "ready": false,
+    "exit": 1,
+    "blockers": 1,
+    "warnings": 0,
+    "unknown": 0,
+    "acknowledged": 0,
+    "skipped": 0,
+    "pushed": false,
+    "strict": false,
+    "line": "Ready to make public: no (1 blocker)"
+  },
+  "notRun": [],
+  "exit": 1
+}

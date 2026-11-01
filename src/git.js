@@ -3,17 +3,39 @@
 // is invoked, which flags keep odd paths intact, or how failures are swallowed.
 import { execFileSync } from 'node:child_process';
 
+// execFileSync buffers a command's whole output in memory and throws ENOBUFS
+// past this. 64 MB is far more than any repository has produced in testing
+// (604 files over 42 commits produce 11 KB), but "far more" is not "always", so
+// the overflow is turned into a reported limit rather than a stack trace.
+// The environment variable exists so that path can be tested without building
+// a repository big enough to reach 64 MB.
+const MAX_BUFFER = Number(process.env.PUSHREADY_MAX_BUFFER) || 64 * 1024 * 1024;
+
+/** Thrown when a git command produced more output than pushready can hold. */
+export class GitOutputTooLarge extends Error {
+  constructor(args) {
+    super(`git ${args[0]} produced more output than pushready can read at once`);
+    this.name = 'GitOutputTooLarge';
+  }
+}
+
 export function git(dir, args) {
   // quotePath=false stops git escaping non-ASCII paths (".env" under "café/" came
   // back as "caf\303\251/.env" and was missed). Commands that can see odd paths
   // also use -z, which covers paths containing newlines.
-  return execFileSync('git', ['-c', 'core.quotePath=false', ...args], {
-    cwd: dir,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'ignore'],
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  try {
+    return execFileSync('git', ['-c', 'core.quotePath=false', ...args], {
+      cwd: dir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: MAX_BUFFER,
+    });
+  } catch (error) {
+    if (error.code === 'ENOBUFS') throw new GitOutputTooLarge(args);
+    throw error;
+  }
 }
+
 
 export function isGitRepo(dir) {
   try {

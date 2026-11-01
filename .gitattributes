@@ -1,0 +1,6 @@
+# Keep every text file LF in the working tree on every platform. The recorded
+# scenario output under test/golden/ is compared byte for byte against what the
+# CLI prints, and Node prints \n on Windows too — so a CRLF checkout would fail
+# every comparison for a reason that has nothing to do with pushready.
+* text=auto eol=lf
+*.png binary

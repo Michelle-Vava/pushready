@@ -1,0 +1,142 @@
+# shallow — A shallow clone, where the history cannot be fully checked
+# expects exit 0
+
+=== pushready <repo> (exit 0) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ? Only part of the git history can be checked: this is a shallow clone, so older commits are not here; only one branch was cloned, so other branches are not here
+      → A risky file in the commits that are missing will not be found. Fix with: git fetch --unshallow , then git remote set-branches origin "*" && git fetch
+  ? 0 private key files found, but the history is incomplete (see above)
+  ? 0 credential files found, but the history is incomplete (see above)
+  ? 0 data files found, but the history is incomplete (see above)
+
+  Ready to make public: yes, as far as could be checked (4 could not be checked)
+  5 passed, 0 warnings, 0 failed, 4 could not be checked
+
+=== pushready <repo> --history (exit 0) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ? Only part of the git history can be checked: this is a shallow clone, so older commits are not here; only one branch was cloned, so other branches are not here
+      → A risky file in the commits that are missing will not be found. Fix with: git fetch --unshallow , then git remote set-branches origin "*" && git fetch
+  ? 0 private key files found, but the history is incomplete (see above)
+  ? 0 credential files found, but the history is incomplete (see above)
+  ? 0 data files found, but the history is incomplete (see above)
+
+  Ready to make public: yes, as far as could be checked (4 could not be checked)
+  5 passed, 0 warnings, 0 failed, 4 could not be checked
+
+=== pushready <repo> --json (exit 0) ===
+{
+  "version": "<version>",
+  "dir": "<repo>",
+  "findings": [
+    {
+      "id": "readme",
+      "title": "README",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "README.md found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "license",
+      "title": "LICENSE",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "LICENSE found (MIT)",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "gitignore",
+      "title": ".gitignore",
+      "severity": "blocker",
+      "status": "pass",
+      "message": ".gitignore found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "env-tracked",
+      "title": "Committed secrets",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No .env files committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "dependencies-tracked",
+      "title": "Committed dependencies",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No dependencies or build output committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-scope",
+      "title": "Git history available",
+      "severity": "info",
+      "status": "unknown",
+      "message": "Only part of the git history can be checked: this is a shallow clone, so older commits are not here; only one branch was cloned, so other branches are not here",
+      "fix": "A risky file in the commits that are missing will not be found. Fix with: git fetch --unshallow , then git remote set-branches origin \"*\" && git fetch",
+      "items": []
+    },
+    {
+      "id": "history-keys",
+      "title": "Private keys in history",
+      "severity": "blocker",
+      "status": "unknown",
+      "message": "0 private key files found, but the history is incomplete (see above)",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-credentials",
+      "title": "Credential files in history",
+      "severity": "blocker",
+      "status": "unknown",
+      "message": "0 credential files found, but the history is incomplete (see above)",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-data",
+      "title": "Database files in history",
+      "severity": "warning",
+      "status": "unknown",
+      "message": "0 data files found, but the history is incomplete (see above)",
+      "fix": null,
+      "items": []
+    }
+  ],
+  "guide": null,
+  "verdict": {
+    "ready": true,
+    "exit": 0,
+    "blockers": 0,
+    "warnings": 0,
+    "unknown": 4,
+    "acknowledged": 0,
+    "skipped": 0,
+    "pushed": false,
+    "strict": false,
+    "line": "Ready to make public: yes, as far as could be checked (4 could not be checked)"
+  },
+  "notRun": [],
+  "exit": 0
+}

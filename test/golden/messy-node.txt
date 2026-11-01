@@ -1,0 +1,321 @@
+# messy-node — A Node project with the usual mistakes
+# expects exit 1
+
+=== pushready <repo> (exit 1) ===
+
+Checking <repo>
+
+  ! README.md is very short (1 line)
+      → Explain what the project does, how to install it and how to use it.
+  ✖ No LICENSE file
+      → Without a license nobody may legally reuse your code. See https://choosealicense.com
+  ! .gitignore does not ignore node_modules or .env
+      → Add "node_modules" and ".env" to .gitignore.
+  ✖ Secret file(s) committed: .env
+      .env — still in the repo, on main, local only
+      → Run "git rm --cached <file>", add it to .gitignore, and rotate any keys it held. Commit a .env.example instead.
+  ✖ node_modules (1 file) is committed — installed npm packages
+      → Run "git rm -r --cached node_modules", add it to .gitignore, and commit your lockfile instead. Files inside are not checked one by one: untrack the folder, then run pushready again.
+  ✔ Full git history available
+  ✔ No private key files in git history
+  ✖ 1 credential file in git history
+      .env.local — deleted, on main, local only
+      → These names are normally used for logins or API tokens. Deleting the file in a later commit does not remove it — see "What to do next" below.
+  ! 1 data file in git history
+      dev.sqlite3 — still in the repo, on main, local only
+      → These names are normally used for databases, which may hold personal data. See "What to do next" below.
+
+  What to do next
+    1. None of these were pushed from this clone, so they probably never left your machine.
+       Run "git fetch" if you are not sure, and rotate anything you cannot account for.
+    2. Check what dev.sqlite3 holds before you push. Leaked data cannot be rotated.
+    3. Remove .env, .env.local, dev.sqlite3 from history yourself — pushready will not do it for you:
+       git filter-repo --invert-paths --path ".env" --path ".env.local" --path "dev.sqlite3"
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Run again with --history for the full guide.
+
+  Ready to make public: no (4 blockers)
+  2 passed, 3 warnings, 4 failed
+
+=== pushready <repo> --history (exit 1) ===
+
+Checking <repo>
+
+  ! README.md is very short (1 line)
+      → Explain what the project does, how to install it and how to use it.
+  ✖ No LICENSE file
+      → Without a license nobody may legally reuse your code. See https://choosealicense.com
+  ! .gitignore does not ignore node_modules or .env
+      → Add "node_modules" and ".env" to .gitignore.
+  ✖ Secret file(s) committed: .env
+      .env
+          status     still in the repo
+          exposure   local only — this repo has no remote, or the file is only in a stash (which is never pushed), so it has not left here
+          added in   <sha>
+          branches   main
+          remotes    none
+          gitignore  not listed
+      → Run "git rm --cached <file>", add it to .gitignore, and rotate any keys it held. Commit a .env.example instead.
+  ✖ node_modules (1 file) is committed — installed npm packages
+      → Run "git rm -r --cached node_modules", add it to .gitignore, and commit your lockfile instead. Files inside are not checked one by one: untrack the folder, then run pushready again.
+  ✔ Full git history available
+  ✔ No private key files in git history
+  ✖ 1 credential file in git history
+      .env.local
+          status     deleted, but still in history
+          exposure   local only — this repo has no remote, or the file is only in a stash (which is never pushed), so it has not left here
+          added in   <sha>
+          branches   main
+          remotes    none
+          gitignore  not listed
+      → These names are normally used for logins or API tokens. Deleting the file in a later commit does not remove it — see "What to do next" below.
+  ! 1 data file in git history
+      dev.sqlite3
+          status     still in the repo
+          exposure   local only — this repo has no remote, or the file is only in a stash (which is never pushed), so it has not left here
+          added in   <sha>
+          branches   main
+          remotes    none
+          gitignore  not listed
+      → These names are normally used for databases, which may hold personal data. See "What to do next" below.
+
+  What to do next
+    1. None of these were pushed from this clone, so they probably never left your machine.
+       Run "git fetch" if you are not sure, and rotate anything you cannot account for.
+    2. Check what dev.sqlite3 holds before you push. Leaked data cannot be rotated.
+    3. Remove .env, .env.local, dev.sqlite3 from history yourself — pushready will not do it for you:
+       git filter-repo --invert-paths --path ".env" --path ".env.local" --path "dev.sqlite3"
+       git filter-repo is not part of git; install it first.
+       Run it on a fresh clone. It refuses to rewrite a repo with other changes unless you pass --force,
+       and it removes the "origin" remote afterwards, so add it back before pushing.
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Docs: https://github.com/newren/git-filter-repo#how-do-i-install-it
+
+  Ready to make public: no (4 blockers)
+  2 passed, 3 warnings, 4 failed
+
+=== pushready <repo> --json (exit 1) ===
+{
+  "version": "<version>",
+  "dir": "<repo>",
+  "findings": [
+    {
+      "id": "readme",
+      "title": "README",
+      "severity": "blocker",
+      "status": "warn",
+      "message": "README.md is very short (1 line)",
+      "fix": "Explain what the project does, how to install it and how to use it.",
+      "items": []
+    },
+    {
+      "id": "license",
+      "title": "LICENSE",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "No LICENSE file",
+      "fix": "Without a license nobody may legally reuse your code. See https://choosealicense.com",
+      "items": []
+    },
+    {
+      "id": "gitignore",
+      "title": ".gitignore",
+      "severity": "blocker",
+      "status": "warn",
+      "message": ".gitignore does not ignore node_modules or .env",
+      "fix": "Add \"node_modules\" and \".env\" to .gitignore.",
+      "items": []
+    },
+    {
+      "id": "env-tracked",
+      "title": "Committed secrets",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "Secret file(s) committed: .env",
+      "fix": "Run \"git rm --cached <file>\", add it to .gitignore, and rotate any keys it held. Commit a .env.example instead.",
+      "items": [
+        {
+          "path": ".env",
+          "present": true,
+          "commit": "<sha>",
+          "branch": "main",
+          "branches": [
+            "main"
+          ],
+          "remotes": [],
+          "tags": [],
+          "refs": [],
+          "stashes": [],
+          "place": "branch",
+          "onCurrentBranch": true,
+          "exposure": "local only",
+          "aliases": [],
+          "kind": "credential",
+          "ignored": false,
+          "acknowledged": false,
+          "reason": ""
+        }
+      ]
+    },
+    {
+      "id": "dependencies-tracked",
+      "title": "Committed dependencies",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "node_modules (1 file) is committed — installed npm packages",
+      "fix": "Run \"git rm -r --cached node_modules\", add it to .gitignore, and commit your lockfile instead. Files inside are not checked one by one: untrack the folder, then run pushready again.",
+      "items": []
+    },
+    {
+      "id": "history-scope",
+      "title": "Git history available",
+      "severity": "info",
+      "status": "pass",
+      "message": "Full git history available",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-keys",
+      "title": "Private keys in history",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No private key files in git history",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-credentials",
+      "title": "Credential files in history",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "1 credential file in git history",
+      "fix": "These names are normally used for logins or API tokens. Deleting the file in a later commit does not remove it — see \"What to do next\" below.",
+      "items": [
+        {
+          "path": ".env.local",
+          "present": false,
+          "commit": "<sha>",
+          "branch": "main",
+          "branches": [
+            "main"
+          ],
+          "remotes": [],
+          "tags": [],
+          "refs": [],
+          "stashes": [],
+          "place": "branch",
+          "onCurrentBranch": true,
+          "exposure": "local only",
+          "aliases": [],
+          "kind": "credential",
+          "ignored": false,
+          "acknowledged": false,
+          "reason": ""
+        }
+      ]
+    },
+    {
+      "id": "history-data",
+      "title": "Database files in history",
+      "severity": "warning",
+      "status": "warn",
+      "message": "1 data file in git history",
+      "fix": "These names are normally used for databases, which may hold personal data. See \"What to do next\" below.",
+      "items": [
+        {
+          "path": "dev.sqlite3",
+          "present": true,
+          "commit": "<sha>",
+          "branch": "main",
+          "branches": [
+            "main"
+          ],
+          "remotes": [],
+          "tags": [],
+          "refs": [],
+          "stashes": [],
+          "place": "branch",
+          "onCurrentBranch": true,
+          "exposure": "local only",
+          "aliases": [],
+          "kind": "data",
+          "ignored": false,
+          "acknowledged": false,
+          "reason": ""
+        }
+      ]
+    }
+  ],
+  "guide": {
+    "steps": [
+      {
+        "id": "rotate",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "None of these were pushed from this clone, so they probably never left your machine."
+          },
+          {
+            "kind": "manual",
+            "text": "Run \"git fetch\" if you are not sure, and rotate anything you cannot account for."
+          }
+        ]
+      },
+      {
+        "id": "data",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "Check what dev.sqlite3 holds before you push. Leaked data cannot be rotated."
+          }
+        ]
+      },
+      {
+        "id": "rewrite",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "Remove .env, .env.local, dev.sqlite3 from history yourself — pushready will not do it for you:"
+          },
+          {
+            "kind": "run",
+            "text": "git filter-repo --invert-paths --path \".env\" --path \".env.local\" --path \"dev.sqlite3\"",
+            "command": "git filter-repo --invert-paths --path \".env\" --path \".env.local\" --path \"dev.sqlite3\""
+          },
+          {
+            "kind": "manual",
+            "text": "git filter-repo is not part of git; install it first."
+          },
+          {
+            "kind": "manual",
+            "text": "Run it on a fresh clone. It refuses to rewrite a repo with other changes unless you pass --force,"
+          },
+          {
+            "kind": "manual",
+            "text": "and it removes the \"origin\" remote afterwards, so add it back before pushing."
+          }
+        ]
+      }
+    ],
+    "links": [
+      "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository",
+      "https://github.com/newren/git-filter-repo#how-do-i-install-it"
+    ],
+    "detailed": true
+  },
+  "verdict": {
+    "ready": false,
+    "exit": 1,
+    "blockers": 4,
+    "warnings": 3,
+    "unknown": 0,
+    "acknowledged": 0,
+    "skipped": 0,
+    "pushed": false,
+    "strict": false,
+    "line": "Ready to make public: no (4 blockers)"
+  },
+  "notRun": [],
+  "exit": 1
+}

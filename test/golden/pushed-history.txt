@@ -1,0 +1,266 @@
+# pushed-history — A secret that was already pushed, then deleted
+# expects exit 2
+
+=== pushready <repo> (exit 2) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✔ No private key files in git history
+  ✖ 1 credential file in git history
+      service-account-prod.json — deleted, on main, pushed
+      → These names are normally used for logins or API tokens, and they were pushed. Rotate anything that was real, then see "What to do next" below.
+  ✔ No data files in git history
+
+  What to do next
+    1. Rotate or revoke these now: service-account-prod.json.
+       They were pushed, so cleaning history will not un-leak them from clones, forks or caches.
+    2. Remove service-account-prod.json from history yourself — pushready will not do it for you:
+       git filter-repo --invert-paths --path "service-account-prod.json"
+    3. Force-push the rewritten history, and ask every collaborator to re-clone.
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Run again with --history for the full guide.
+
+  Ready to make public: no (1 blocker) — something was pushed, rotate first
+  8 passed, 0 warnings, 1 failed
+
+=== pushready <repo> --history (exit 2) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✔ No private key files in git history
+  ✖ 1 credential file in git history
+      service-account-prod.json
+          status     deleted, but still in history
+          exposure   pushed — on a remote-tracking branch, so treat it as already public
+          added in   <sha>
+          branches   main
+          remotes    origin/main
+          gitignore  not listed
+      → These names are normally used for logins or API tokens, and they were pushed. Rotate anything that was real, then see "What to do next" below.
+  ✔ No data files in git history
+
+  What to do next
+    1. Rotate or revoke these now: service-account-prod.json.
+       They were pushed, so cleaning history will not un-leak them from clones, forks or caches.
+    2. Remove service-account-prod.json from history yourself — pushready will not do it for you:
+       git filter-repo --invert-paths --path "service-account-prod.json"
+       git filter-repo is not part of git; install it first.
+       Run it on a fresh clone. It refuses to rewrite a repo with other changes unless you pass --force,
+       and it removes the "origin" remote afterwards, so add it back before pushing.
+    3. Force-push the rewritten history, and ask every collaborator to re-clone.
+       Old clones and forks still hold the secret; a rewrite on your side does not reach them.
+       On GitHub, cached pull request refs can keep the old commits reachable even after a force-push.
+       Contact GitHub Support to have them purged: https://support.github.com/
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Docs: https://github.com/newren/git-filter-repo#how-do-i-install-it
+
+  Ready to make public: no (1 blocker) — something was pushed, rotate first
+  8 passed, 0 warnings, 1 failed
+
+=== pushready <repo> --json (exit 2) ===
+{
+  "version": "<version>",
+  "dir": "<repo>",
+  "findings": [
+    {
+      "id": "readme",
+      "title": "README",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "README.md found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "license",
+      "title": "LICENSE",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "LICENSE found (MIT)",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "gitignore",
+      "title": ".gitignore",
+      "severity": "blocker",
+      "status": "pass",
+      "message": ".gitignore found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "env-tracked",
+      "title": "Committed secrets",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No .env files committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "dependencies-tracked",
+      "title": "Committed dependencies",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No dependencies or build output committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-scope",
+      "title": "Git history available",
+      "severity": "info",
+      "status": "pass",
+      "message": "Full git history available",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-keys",
+      "title": "Private keys in history",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No private key files in git history",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-credentials",
+      "title": "Credential files in history",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "1 credential file in git history",
+      "fix": "These names are normally used for logins or API tokens, and they were pushed. Rotate anything that was real, then see \"What to do next\" below.",
+      "items": [
+        {
+          "path": "service-account-prod.json",
+          "present": false,
+          "commit": "<sha>",
+          "branch": "main",
+          "branches": [
+            "main"
+          ],
+          "remotes": [
+            "origin/main"
+          ],
+          "tags": [],
+          "refs": [],
+          "stashes": [],
+          "place": "branch",
+          "onCurrentBranch": true,
+          "exposure": "pushed",
+          "aliases": [],
+          "kind": "credential",
+          "ignored": false,
+          "acknowledged": false,
+          "reason": ""
+        }
+      ]
+    },
+    {
+      "id": "history-data",
+      "title": "Database files in history",
+      "severity": "warning",
+      "status": "pass",
+      "message": "No data files in git history",
+      "fix": null,
+      "items": []
+    }
+  ],
+  "guide": {
+    "steps": [
+      {
+        "id": "rotate",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "Rotate or revoke these now: service-account-prod.json."
+          },
+          {
+            "kind": "manual",
+            "text": "They were pushed, so cleaning history will not un-leak them from clones, forks or caches."
+          }
+        ]
+      },
+      {
+        "id": "rewrite",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "Remove service-account-prod.json from history yourself — pushready will not do it for you:"
+          },
+          {
+            "kind": "run",
+            "text": "git filter-repo --invert-paths --path \"service-account-prod.json\"",
+            "command": "git filter-repo --invert-paths --path \"service-account-prod.json\""
+          },
+          {
+            "kind": "manual",
+            "text": "git filter-repo is not part of git; install it first."
+          },
+          {
+            "kind": "manual",
+            "text": "Run it on a fresh clone. It refuses to rewrite a repo with other changes unless you pass --force,"
+          },
+          {
+            "kind": "manual",
+            "text": "and it removes the \"origin\" remote afterwards, so add it back before pushing."
+          }
+        ]
+      },
+      {
+        "id": "force-push",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "Force-push the rewritten history, and ask every collaborator to re-clone."
+          },
+          {
+            "kind": "manual",
+            "text": "Old clones and forks still hold the secret; a rewrite on your side does not reach them."
+          },
+          {
+            "kind": "manual",
+            "text": "On GitHub, cached pull request refs can keep the old commits reachable even after a force-push."
+          },
+          {
+            "kind": "manual",
+            "text": "Contact GitHub Support to have them purged: https://support.github.com/"
+          }
+        ]
+      }
+    ],
+    "links": [
+      "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository",
+      "https://github.com/newren/git-filter-repo#how-do-i-install-it"
+    ],
+    "detailed": true
+  },
+  "verdict": {
+    "ready": false,
+    "exit": 2,
+    "blockers": 1,
+    "warnings": 0,
+    "unknown": 0,
+    "acknowledged": 0,
+    "skipped": 0,
+    "pushed": true,
+    "strict": false,
+    "line": "Ready to make public: no (1 blocker) — something was pushed, rotate first"
+  },
+  "notRun": [],
+  "exit": 2
+}

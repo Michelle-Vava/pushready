@@ -19,9 +19,10 @@ Checking /home/me/my-app
   ! .gitignore does not ignore node_modules or .env
       → Add "node_modules" and ".env" to .gitignore.
   ✖ Secret file(s) committed: .env
+      .env — still in the repo, on main, local only
       → Run "git rm --cached <file>", add it to .gitignore, and rotate any keys it held. Commit a .env.example instead.
-  ✖ node_modules is committed (1 file)
-      → Run "git rm -r --cached node_modules" and add node_modules to .gitignore.
+  ✖ node_modules (1 file) is committed — installed npm packages
+      → Run "git rm -r --cached node_modules", add it to .gitignore, and commit your lockfile instead. Files inside are not checked one by one: untrack the folder, then run pushready again.
   ✔ Full git history available
   ✔ No private key files in git history
   ✖ 1 credential file in git history
@@ -35,11 +36,12 @@ Checking /home/me/my-app
     1. None of these were pushed from this clone, so they probably never left your machine.
        Run "git fetch" if you are not sure, and rotate anything you cannot account for.
     2. Check what dev.sqlite3 holds before you push. Leaked data cannot be rotated.
-    3. Remove .env.local, dev.sqlite3 from history yourself — pushready will not do it for you:
-       git filter-repo --invert-paths --path ".env.local" --path "dev.sqlite3"
+    3. Remove .env, .env.local, dev.sqlite3 from history yourself — pushready will not do it for you:
+       git filter-repo --invert-paths --path ".env" --path ".env.local" --path "dev.sqlite3"
     Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
     Run again with --history for the full guide.
 
+  Ready to make public: no (4 blockers)
   2 passed, 3 warnings, 4 failed
 ```
 
@@ -115,6 +117,8 @@ The tools I found either looked for secrets only, needed configuration, or had b
 - run: npx --yes github:Michelle-Vava/pushready
 ```
 
+Add `--strict` to fail the step on warnings and on anything that could not be checked, or `--json` to read the result from a later step. A shallow checkout (the default `fetch-depth`) is reported as "could not be checked", not as a pass.
+
 ## Try it
 
 Needs Node.js 18 or newer and git. There are no dependencies to install.
@@ -134,7 +138,7 @@ npm run demo -- pushed-history --history
 npm start -- path/to/your/project
 ```
 
-The demo scenarios are `clean-node`, `clean-python`, `messy-node`, `messy-python`, `deleted-local`, `pushed-history`, `branch-only`, `gitignored-too-late`, `renamed-secret`, `stash-only`, `tag-only`, `unreachable`, `acknowledged`, `shallow` and `large` (600 files over 40 commits). Each one declares the exit code it should produce, so `npm run demo` also checks they still behave as described.
+The demo scenarios are `clean-node`, `clean-python`, `messy-node`, `messy-python`, `deleted-local`, `pushed-history`, `branch-only`, `gitignored-too-late`, `renamed-secret`, `stash-only`, `tag-only`, `unreachable`, `acknowledged`, `broken-config`, `misshaped-config`, `no-commits`, `detached-head`, `shallow` and `large` (600 files over 40 commits — a test of *many* files, not of large ones; there is no size check yet). Each one declares the exit code it should produce, and its full output is recorded under `test/golden/`, so `npm run demo` checks the code and `npm test` checks every line it printed.
 
 To use it as a command anywhere on your machine:
 
@@ -146,8 +150,17 @@ pushready path/to/your/project
 | Option | What it does |
 |---|---|
 | `--history` | show each risky file as a labelled block — commit, branches, remotes, `.gitignore` status — plus the full exposure guide |
-| `-h`, `--help` | show usage |
+| `--json` | print the findings as one JSON document instead of the report: `{ version, dir, findings, guide, verdict, notRun, exit }`. The shape of a finding is documented in `src/finding.js`. Byte-stable across runs; never changes the exit code |
+| `--quiet` | print only what failed, warned or could not be checked. Everything else is still counted in the summary |
+| `--strict` | a warning, or a check that could not run, is enough for exit `1` |
+| `--only <ids>` | run only these checks (`--only readme,license`, or repeat the flag). `pushready --help` lists the ids |
+| `--skip <ids>` | run every check except these. Skipping the check that would report a path hands the path to the next check that saw it, so `--skip env-tracked` does not hide a committed `.env` |
+| `-h`, `--help` | show usage, the check ids and the exit-code contract |
 | `-v`, `--version` | show the version |
+
+Point it at a folder inside a repository and it checks the whole repository, and says so.
+
+Every run ends with a one-line verdict that agrees with the exit code: `Ready to make public: yes`, or `no (2 blockers) — something was pushed, rotate first`, or `yes, as far as could be checked (4 could not be checked)` when part of the history is missing.
 
 **Exit codes** tell a script how urgent the problem is, so CI can treat a leaked-and-pushed key differently from one that never left the machine:
 
@@ -156,7 +169,9 @@ pushready path/to/your/project
 | `0` | nothing to fix, or everything found was acknowledged |
 | `1` | problems found, but nothing has been pushed from this clone |
 | `2` | problems found, and at least one was already pushed — rotate first |
-| `64` | pushready was used wrongly (for example, the path is not a folder) |
+| `64` | pushready was used wrongly: the path is not a folder or is a bare repository, two paths were given, an option or check id is not one pushready knows, or an option is missing its value |
+
+`--skip` and `--only` leave checks unrun, so those checks cannot affect the code. A check that *could not* run (a shallow clone, a broken `.pushready.json`) never fails the run on its own; `--strict` changes that. `--json` never changes the code.
 
 ## Acknowledging a finding
 
@@ -171,6 +186,10 @@ Some findings are fine once you've looked at them — a test fixture named `dumm
 ```
 
 Acknowledged findings **stay in the output**, marked `acknowledged` with your reason, and drop out of the "What to do next" guide. They no longer fail the run. Nothing is hidden: the point is to record that you decided, not to make the finding disappear. Acknowledging one path doesn't excuse any other.
+
+This applies to every check, not only the history ones: a tracked fixture such as `test/fixtures/.env` is acknowledged by its path, and a deliberately vendored `node_modules` by the path `node_modules`.
+
+The file may carry `"version": 1`. Without it, 1 is assumed. A file that names a newer version is applied where understood, with a warning. A file that is not valid JSON, is not an object, or has `"acknowledge"` as anything but a list, is reported with what was expected, and acknowledges nothing. This is the whole of the format: which checks run is decided by flags, not config, so that nothing silenced in a file can surprise someone reading the CI output.
 
 ## .gitignore and files git already has
 
@@ -188,12 +207,14 @@ pushready spots this. When a risky file in your history is already listed in `.g
 | README | there is none | it has fewer than 5 lines |
 | LICENSE | there is none | the license type is not recognised |
 | .gitignore | there is none | it doesn't ignore `.env`, or `node_modules` in a Node project |
-| Committed secrets | a `.env` / `.env.*` file is tracked (`.env.example` is fine). Says *staged, not yet committed* when it has never been in a commit, since then there is nothing to rotate or clean | |
-| Committed dependencies | files under `node_modules` are tracked | |
+| Committed secrets | a `.env` / `.env.*` file is tracked (`.env.example` is fine). Says *staged, not yet committed* when it has never been in a commit, since then there is nothing to rotate or clean. A committed one is shown with where it is and whether it was pushed, exactly like a file in history, and goes into the cleanup command | |
+| Committed dependencies | a dependency tree or build output is committed: `node_modules`, a Python virtualenv (`pyvenv.cfg` or `site-packages/`), Composer's `vendor/`, Ruby's `vendor/bundle/`, or .NET `bin/Debug` / `obj`. Detected by marker, not by folder name, so a hand-written `bin/` script or a deliberately vendored Go dependency is left alone | |
 | Private keys in history | a name like `id_rsa`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore` or `*.ppk` is anywhere in history | |
 | Credential files in history | a name like `.env*`, `credentials.json`, `service-account*.json`, `.netrc`, `kubeconfig`, `.pgpass` or `*.tfstate` is anywhere in history | |
 | Database files in history | | a name like `*.sqlite3` or `*.db` is anywhere in history |
 | Git history available | | only part of it can be checked: a shallow or single-branch clone, or a submodule |
+
+Files **inside** a committed dependency tree are not matched individually: they are third-party, and a `.pem` in there is almost always a CA bundle or a test fixture. The finding is that the tree was committed, and untracking it removes them all. CA bundles (`cacert.pem`, `ca-bundle.crt`, Java's `cacerts`) are never flagged, wherever they live — they are lists of public certificates.
 
 Matching is case-insensitive, so a `.ENV` is caught as well as a `.env` — it is the same file on Windows and macOS. Java keystores (`*.jks`, `*.keystore`) and PuTTY keys (`*.ppk`) hold private keys even though the extension doesn't say so. Terraform state is treated as a credential rather than data because it routinely records provider credentials and generated passwords in plain text, and those can be rotated.
 
@@ -230,26 +251,86 @@ A repository can still contain personal data in files pushready doesn't open. pu
 
 ## Code layout
 
-Small enough to read in one sitting. Each file has one job:
+One run, end to end. Each stage hands the next one a single, named thing:
+
+```
+  pushready ./my-app --json
+        │
+        ▼
+  ┌──────────────┐  parse flags, resolve the path. A folder inside a repo
+  │   cli.js     │  means the repo. Nothing here knows what a check is.
+  └──────┬───────┘
+         ▼
+  ┌──────────────┐  ONE lazy, read-only view of the repository, shared by
+  │ snapshot.js  │  every check. Nothing is read until a check asks, and a
+  └──────┬───────┘  check can only reach the fields it declared.
+         │              ├── git.js       the only place git is run
+         │              ├── history.js   where a path lives, was it pushed
+         │              ├── patterns.js  which names are risky
+         ▼              └── acknowledge.js  reads .pushready.json
+  ┌──────────────┐  9 checks. Each declares id, title, severity, what it
+  │  checks.js   │  reads, and when it applies. --only / --skip pick from here.
+  └──────┬───────┘
+         ▼
+  ┌──────────────┐  What no single check can decide: report each path once,
+  │  policy.js   │  and apply .pushready.json to all of them.
+  └──────┬───────┘
+         ▼
+  ┌──────────────┐  { id, title, severity, status, message, fix, items[] }
+  │ finding.js   │  The one shape. Every result has it, placeholders included.
+  └──────┬───────┘
+         ├───────────────────────────┐
+         ▼                           ▼
+  ┌──────────────┐           ┌──────────────┐  8 rules → steps of actions:
+  │ verdict.js   │           │  guide.js    │  { kind: 'run', text, command }
+  │ exit code +  │           │ what to do   │  Pure: it never touches git or
+  │ the verdict  │           │ next, in     │  the disk, which is why it can
+  │ line         │           │ order        │  describe a command safely.
+  └──────┬───────┘           └──────┬───────┘
+         └─────────────┬────────────┘
+                       ▼
+            text report  │  --json
+            (cli.js renders both from the same findings)
+```
+
+**Why it is shaped like this.** Three rules fall out of the diagram, and each
+one closes a bug that actually happened:
+
+- **Only `snapshot.js` reads anything.** A check gets the snapshot and nothing
+  else, so "pushready never opens your `.env`" is enforced in one file instead
+  of promised by each check. It is also why the whole run costs the same on a
+  2,000-file repo as on a 10-file one: one history walk, shared.
+- **Cross-check decisions live in `policy.js`, not inside a check.** When
+  suppressing a duplicate lived inside the snapshot, a pushed `.env` that was
+  still tracked was reported with *less* detail than one that had been deleted.
+  A pass over the findings can merge them instead of dropping one.
+- **`verdict.js` decides the exit code once.** The text report and `--json`
+  cannot disagree about whether a repo is ready, because neither computes it.
 
 | File | Job |
 |---|---|
 | `src/index.js` | What the CLI and the tests import. Everything else is internal. |
 | `src/cli.js` | Parse arguments, print the report, choose the exit code. No checking logic. |
-| `src/checks.js` | The checks and the order they run in. Each declares the snapshot fields it reads. |
+| `src/checks.js` | The checks and the order they run in. Each has an id, a title, a severity, the snapshot fields it reads, and when it applies. `--only` / `--skip` select from here. |
+| `src/finding.js` | The one shape every result has, documented and built in one place. What `--json` prints. |
+| `src/policy.js` | What applies across checks after they run: each path is reported once, and `.pushready.json` is applied everywhere. |
+| `src/verdict.js` | The exit code and the verdict line, decided once for the text report and `--json` alike. |
 | `src/snapshot.js` | A lazy, shared, read-only view of one repository. Decides what a check may look at. |
-| `src/patterns.js` | Which file names count as risky. Pure data and matching, no I/O. |
+| `src/patterns.js` | Which file names count as risky, and which folders are committed dependency trees. Pure data and matching, no I/O. |
 | `src/git.js` | The only place git is run. Everything else asks for paths and hashes. |
 | `src/history.js` | Where a path lives in git: first commit, what holds it, whether it was pushed, other names it had. |
-| `src/guide.js` | The "What to do next" steps, built from findings. Touches neither git nor the filesystem. |
+| `src/guide.js` | The "What to do next" steps: 8 rules, each deciding whether it applies and building its actions. Touches neither git nor the filesystem. |
 | `src/acknowledge.js` | Reads `.pushready.json`. |
 | `src/text.js` | Shared wording helpers. |
 
 ## How it's tested
 
-- `npm test` runs 52 tests with Node's built-in test runner. Each test builds a throwaway git repo in your temp folder (clean, missing files, committed `.env`, risky files left in history, renamed in or out of a risky name, renamed through a chain of names, never pushed, pushed then deleted, on one branch only, only in a stash, only on a tag, held by a leftover ref, amended away, on a deleted branch, in a dropped stash, a shallow clone, and so on) and checks the result. Pushing is tested against a local bare repo, so the tests stay offline.
+- `npm test` runs 232 tests with Node's built-in test runner, across eleven files: the checks themselves, the command line, repository states, unusual git states (detached HEAD, orphan branch, mid-merge, mid-rebase, linked worktree, packed refs), `.pushready.json`, non-JavaScript projects, the flags and the exit-code contract, the remediation guide, portability, and cost. Each test builds a throwaway git repo in your temp folder (clean, missing files, committed `.env`, risky files left in history, renamed in or out of a risky name, renamed through a chain of names, never pushed, pushed then deleted, on one branch only, only in a stash, only on a tag, held by a leftover ref, amended away, on a deleted branch, in a dropped stash, a shallow clone, no commits at all, and so on) and checks the result. Pushing is tested against a local bare repo, so the tests stay offline.
+- **The demo scenarios assert their whole output, not just their exit code.** Each one's full report, plain, `--history` and `--json`, is recorded under `test/golden/` and compared on every run, so a change in wording or guidance shows up as a reviewable diff. `npm run golden` re-records them. This exists because a scenario once spent three releases not demonstrating what its title claimed while every exit-code assertion still passed.
+- **Cost is asserted in git processes, not seconds**, because a loaded CI runner makes wall-clock flaky. The tests pin that a bigger repository costs no more processes than a small one, and that each risky path adds at most two.
 - **The privacy boundary is tested, not just documented.** Every check declares which parts of the repository snapshot it reads, and a test fails the build if a check touches anything else. The snapshot also refuses outright to open any file beyond README, LICENSE, `.gitignore`, `package.json` and `.pushready.json` — so "pushready never opens your `.env`" is enforced in one place rather than promised by each check.
-- GitHub Actions runs the tests, the demo, and pushready on its own repo on **Windows, macOS and Linux** with Node 20 and 24 on every push.
+- GitHub Actions runs the tests, the demo, pushready on its own repo, and a check that the recorded scenario output is identical on that machine — on **Windows, macOS and Linux**, with **Node 18, 20, 22 and 24**, on every push. `package.json` says `engines: >=18`, so 18 is in the matrix: claiming a version nothing runs on is how a release breaks for someone else.
+- **Portability is tested, not assumed.** The suite has been run under Windows Node 24 and Git for Windows as well as Linux, and the three differences that showed up are fixed and guarded against. `test/portability.test.js` checks the behaviour that only breaks elsewhere — a repository under a path with spaces and accents, CRLF `.gitignore` and README files, findings always using forward slashes — and scans pushready's own source for the habits that caused real breakages: building a path with `+ '/'`, turning a path into a URL by hand, hardcoding `/tmp`, or asserting on a message Node words differently between versions.
 
 ## Roadmap
 
@@ -257,10 +338,10 @@ Small enough to read in one sitting. Each file has one job:
 |---|---|
 | ✅ v0.1 | First checks: README, LICENSE, `.gitignore`, committed `.env` / `node_modules`, secrets in history |
 | ✅ v0.2 | Git-history exposure: what risky files are in history, which commits and branches hold them, and whether they were already pushed, plus a rotate-then-clean guide |
-| 🔧 v0.3 | Check framework, as point releases. **v0.3.0 shipped:** module split and a shared, lazy repository snapshot that enforces what a check may read. **v0.3.1 next:** fixes for gaps a review of v0.3.0 found, with no new features. Then registry metadata and `--only`/`--skip`, `--json` and `--strict`, the guide as rules, fix plans as data. See [ROADMAP.md](ROADMAP.md) for each release's completion criteria |
+| ✅ v0.3 | Check framework, in six point releases: a shared, lazy repository snapshot that enforces what a check may read; severity and a cross-check policy pass; one documented finding shape; `--only` / `--skip`, `--json`, `--quiet`, `--strict` and a verdict line; and the remediation guide as rules returning actions rather than strings. See [ROADMAP.md](ROADMAP.md) |
 | v0.4 | Pre-push git hook that blocks a bad push |
 | v0.5 | `pushready fix`: safe, previewed fixes |
-| v0.6 | More checks: large files, build output, junk files, template README text, `package.json` basics |
+| v0.6 | More checks: large files (scoped in detail in [ROADMAP.md](ROADMAP.md), including why it needs no file contents), build output, junk files, template README text, `package.json` basics |
 | v1.0 | Custom checks from a local file, npm package, Python and .NET support, GitHub Action |
 
 See [ROADMAP.md](ROADMAP.md) for the details and what "done" means for each.

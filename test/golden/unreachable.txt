@@ -1,0 +1,303 @@
+# unreachable — Secrets in commits nothing points at: amended away, deleted branch, dropped stash
+# expects exit 1
+
+=== pushready <repo> (exit 1) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✖ 2 private key files in this repository, outside its history
+      amended.pem — in a commit nothing points at any more, still recoverable, local only
+      dropped.jks — in a commit nothing points at any more, still recoverable, local only
+      → These names are normally used for private keys. Nothing on a branch holds them, so no history rewrite is needed — see "What to do next" below.
+  ✖ 1 credential file in this repository, outside its history
+      kubeconfig — in a commit nothing points at any more, still recoverable, local only
+      → These names are normally used for logins or API tokens. Nothing on a branch holds them, so no history rewrite is needed — see "What to do next" below.
+  ✔ No data files in git history
+
+  What to do next
+    1. None of these are on a branch any more, and no remote-tracking branch has them, so they were probably never pushed.
+       If you force-pushed to undo a mistake, the remote may still hold the old commit — rotate anything you cannot account for.
+    2. amended.pem, dropped.jks, kubeconfig are in commits nothing points at any more — amended away, on a deleted branch, or in a dropped stash.
+       There is no history to rewrite: no branch, tag or stash holds them. But the commits are still on disk and still recoverable until git collects them.
+       Expire the reflog and collect it now:
+       git reflog expire --expire=now --expire-unreachable=now --all && git gc --prune=now
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Run again with --history for the full guide.
+
+  Ready to make public: no (2 blockers)
+  7 passed, 0 warnings, 2 failed
+
+=== pushready <repo> --history (exit 1) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✖ 2 private key files in this repository, outside its history
+      amended.pem
+          status          in an unreachable commit — amended away, on a deleted branch, or a dropped stash
+          exposure        local only — this repo has no remote, or the file is only in a stash (which is never pushed), so it has not left here
+          added in        <sha>
+          branches        none
+          remotes         none
+          reachable from  nothing — the object survives until git collects it, so there is no history to rewrite
+          gitignore       not listed
+      dropped.jks
+          status          in an unreachable commit — amended away, on a deleted branch, or a dropped stash
+          exposure        local only — this repo has no remote, or the file is only in a stash (which is never pushed), so it has not left here
+          added in        <sha>
+          branches        none
+          remotes         none
+          reachable from  nothing — the object survives until git collects it, so there is no history to rewrite
+          gitignore       not listed
+      → These names are normally used for private keys. Nothing on a branch holds them, so no history rewrite is needed — see "What to do next" below.
+  ✖ 1 credential file in this repository, outside its history
+      kubeconfig
+          status          in an unreachable commit — amended away, on a deleted branch, or a dropped stash
+          exposure        local only — this repo has no remote, or the file is only in a stash (which is never pushed), so it has not left here
+          added in        <sha>
+          branches        none
+          remotes         none
+          reachable from  nothing — the object survives until git collects it, so there is no history to rewrite
+          gitignore       not listed
+      → These names are normally used for logins or API tokens. Nothing on a branch holds them, so no history rewrite is needed — see "What to do next" below.
+  ✔ No data files in git history
+
+  What to do next
+    1. None of these are on a branch any more, and no remote-tracking branch has them, so they were probably never pushed.
+       If you force-pushed to undo a mistake, the remote may still hold the old commit — rotate anything you cannot account for.
+    2. amended.pem, dropped.jks, kubeconfig are in commits nothing points at any more — amended away, on a deleted branch, or in a dropped stash.
+       There is no history to rewrite: no branch, tag or stash holds them. But the commits are still on disk and still recoverable until git collects them.
+       Expire the reflog and collect it now:
+       git reflog expire --expire=now --expire-unreachable=now --all && git gc --prune=now
+       Until you do, "git fsck --unreachable" and "git reflog" can both still reach the commit.
+       A clone made before you ran this keeps its own copy: cloning does not carry unreachable objects, but a copied folder does.
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Docs: https://github.com/newren/git-filter-repo#how-do-i-install-it
+
+  Ready to make public: no (2 blockers)
+  7 passed, 0 warnings, 2 failed
+
+=== pushready <repo> --json (exit 1) ===
+{
+  "version": "<version>",
+  "dir": "<repo>",
+  "findings": [
+    {
+      "id": "readme",
+      "title": "README",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "README.md found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "license",
+      "title": "LICENSE",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "LICENSE found (MIT)",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "gitignore",
+      "title": ".gitignore",
+      "severity": "blocker",
+      "status": "pass",
+      "message": ".gitignore found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "env-tracked",
+      "title": "Committed secrets",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No .env files committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "dependencies-tracked",
+      "title": "Committed dependencies",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No dependencies or build output committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-scope",
+      "title": "Git history available",
+      "severity": "info",
+      "status": "pass",
+      "message": "Full git history available",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-keys",
+      "title": "Private keys in history",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "2 private key files in this repository, outside its history",
+      "fix": "These names are normally used for private keys. Nothing on a branch holds them, so no history rewrite is needed — see \"What to do next\" below.",
+      "items": [
+        {
+          "path": "amended.pem",
+          "present": false,
+          "commit": "<sha>",
+          "branch": "",
+          "branches": [],
+          "remotes": [],
+          "tags": [],
+          "refs": [],
+          "stashes": [],
+          "place": "unreachable",
+          "onCurrentBranch": false,
+          "exposure": "local only",
+          "aliases": [],
+          "kind": "credential",
+          "ignored": false,
+          "acknowledged": false,
+          "reason": ""
+        },
+        {
+          "path": "dropped.jks",
+          "present": false,
+          "commit": "<sha>",
+          "branch": "",
+          "branches": [],
+          "remotes": [],
+          "tags": [],
+          "refs": [],
+          "stashes": [],
+          "place": "unreachable",
+          "onCurrentBranch": false,
+          "exposure": "local only",
+          "aliases": [],
+          "kind": "credential",
+          "ignored": false,
+          "acknowledged": false,
+          "reason": ""
+        }
+      ]
+    },
+    {
+      "id": "history-credentials",
+      "title": "Credential files in history",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "1 credential file in this repository, outside its history",
+      "fix": "These names are normally used for logins or API tokens. Nothing on a branch holds them, so no history rewrite is needed — see \"What to do next\" below.",
+      "items": [
+        {
+          "path": "kubeconfig",
+          "present": false,
+          "commit": "<sha>",
+          "branch": "",
+          "branches": [],
+          "remotes": [],
+          "tags": [],
+          "refs": [],
+          "stashes": [],
+          "place": "unreachable",
+          "onCurrentBranch": false,
+          "exposure": "local only",
+          "aliases": [],
+          "kind": "credential",
+          "ignored": false,
+          "acknowledged": false,
+          "reason": ""
+        }
+      ]
+    },
+    {
+      "id": "history-data",
+      "title": "Database files in history",
+      "severity": "warning",
+      "status": "pass",
+      "message": "No data files in git history",
+      "fix": null,
+      "items": []
+    }
+  ],
+  "guide": {
+    "steps": [
+      {
+        "id": "rotate",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "None of these are on a branch any more, and no remote-tracking branch has them, so they were probably never pushed."
+          },
+          {
+            "kind": "manual",
+            "text": "If you force-pushed to undo a mistake, the remote may still hold the old commit — rotate anything you cannot account for."
+          }
+        ]
+      },
+      {
+        "id": "expire-unreachable",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "amended.pem, dropped.jks, kubeconfig are in commits nothing points at any more — amended away, on a deleted branch, or in a dropped stash."
+          },
+          {
+            "kind": "manual",
+            "text": "There is no history to rewrite: no branch, tag or stash holds them. But the commits are still on disk and still recoverable until git collects them."
+          },
+          {
+            "kind": "manual",
+            "text": "Expire the reflog and collect it now:"
+          },
+          {
+            "kind": "run",
+            "text": "git reflog expire --expire=now --expire-unreachable=now --all && git gc --prune=now",
+            "command": "git reflog expire --expire=now --expire-unreachable=now --all && git gc --prune=now"
+          },
+          {
+            "kind": "manual",
+            "text": "Until you do, \"git fsck --unreachable\" and \"git reflog\" can both still reach the commit."
+          },
+          {
+            "kind": "manual",
+            "text": "A clone made before you ran this keeps its own copy: cloning does not carry unreachable objects, but a copied folder does."
+          }
+        ]
+      }
+    ],
+    "links": [
+      "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository",
+      "https://github.com/newren/git-filter-repo#how-do-i-install-it"
+    ],
+    "detailed": true
+  },
+  "verdict": {
+    "ready": false,
+    "exit": 1,
+    "blockers": 2,
+    "warnings": 0,
+    "unknown": 0,
+    "acknowledged": 0,
+    "skipped": 0,
+    "pushed": false,
+    "strict": false,
+    "line": "Ready to make public: no (2 blockers)"
+  },
+  "notRun": [],
+  "exit": 1
+}

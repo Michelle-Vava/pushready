@@ -7,12 +7,12 @@
 //
 // Nothing runs until something asks for it. `pushready --only readme` never
 // reaches a field that spawns git, so it spawns none.
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { ignoredPaths, isGitRepo, listCommitted, listTracked } from './git.js';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { GitOutputTooLarge, ignoredPaths, isGitRepo, listCommitted, listTracked } from './git.js';
 import { describePath, historyLimits, listEverAdded, namesFor, renameGraph, repoContext } from './history.js';
 import { readAcknowledgements } from './acknowledge.js';
-import { categoryOf, isEnvFile } from './patterns.js';
+import { categoryOf } from './patterns.js';
 
 // Run fn at most once, on first use, and remember what it gave back.
 const once = (fn) => {
@@ -49,30 +49,68 @@ const OPENABLE = [
 ];
 
 /**
- * Build a snapshot of `dir`. Every field is a function; calling it is what does
- * the work, and calling it twice costs nothing.
+ * The root of the repository that contains `dir`, or null when no folder from
+ * `dir` upwards holds a `.git`. Pure filesystem, no git process: file-only
+ * checks must stay free of git, and this runs before any of them.
+ *
+ * Why it exists: every git question pushready asks returns paths relative to
+ * the repository root, but "git ls-files" run in a subfolder returns paths
+ * relative to *that folder*. Pointing pushready at src/ used to report src/.env
+ * twice — once as ".env" (tracked) and once as "src/.env, deleted, on no branch"
+ * (history) — and to miss the README, LICENSE and .gitignore at the root. A
+ * linked worktree has a `.git` *file*, which counts just the same.
  */
-export function snapshot(dir) {
+export function repositoryRoot(dir) {
+  let current = dir;
+  for (;;) {
+    if (existsSync(join(current, '.git'))) return current;
+    const parent = dirname(current);
+    if (parent === current) return null;
+    current = parent;
+  }
+}
+
+/**
+ * A repository with no working tree: the folder *is* the git directory. Checked
+ * the way git itself recognises one — HEAD, objects/ and refs/ side by side,
+ * with no .git — because it has to be free. The checks that only read files ask
+ * this before deciding whether they apply, and must not spawn git to find out.
+ */
+export function isBareRepo(dir) {
+  return !existsSync(join(dir, '.git')) && ['HEAD', 'objects', 'refs'].every((entry) => existsSync(join(dir, entry)));
+}
+
+/**
+ * Build a snapshot of `dir`. Every field is a function; calling it is what does
+ * the work, and calling it twice costs nothing. A folder inside a repository
+ * snapshots the repository: see repositoryRoot.
+ */
+export function snapshot(requested) {
+  const dir = repositoryRoot(requested) ?? requested;
   const files = once(() => readdirSync(dir));
-  const tracked = once(() => listTracked(dir));
+  // Reasons a git question could not be answered, discovered while answering
+  // it. historyLimits() reports the ones that can be known up front; this is
+  // for the one that can only be found by trying.
+  const limitations = [];
+  const orLimit = (reason, fix, fallback) => (fn) => {
+    try {
+      return fn();
+    } catch (error) {
+      if (!(error instanceof GitOutputTooLarge)) throw error;
+      if (!limitations.some((l) => l.reason === reason)) limitations.push({ reason, fix });
+      return fallback;
+    }
+  };
+  const trackedOrLimit = orLimit('this repository has too many tracked files for pushready to list at once', 'run pushready on a smaller checkout, or raise PUSHREADY_MAX_BUFFER', []);
+  const historyOrLimit = orLimit('this repository has too much history for pushready to read at once, so older commits were not checked', 'run pushready on a shallower clone, or raise PUSHREADY_MAX_BUFFER', new Set());
+  const tracked = once(() => trackedOrLimit(() => listTracked(dir)));
   const trackedSet = once(() => new Set(tracked()));
   const context = once(() => repoContext(dir));
-  const everAdded = once(() => listEverAdded(dir, context().tips));
-  // Risky paths, in the order the checks report them.
-  //
-  // The .env filter is a cross-check policy, not a property of the repository: a
-  // tracked .env is already reported by env-tracked, and repeating it under
-  // history-credentials would say the same thing twice. It sits here because
-  // every history check needs the same answer.
-  // TODO(v0.3.1): move this to a policy pass over findings. Where it sits now,
-  // `--skip env-tracked` (v0.3.2) would silently hide a committed .env from both
-  // checks, because the suppression would still run with nothing to defer to.
-  const risky = once(() =>
-    [...everAdded()]
-      .filter((p) => !(isEnvFile(p) && trackedSet().has(p)))
-      .filter((p) => categoryOf(p))
-      .sort(),
-  );
+  const everAdded = once(() => historyOrLimit(() => listEverAdded(dir, context().tips)));
+  // Every risky path ever added, sorted. A tracked .env is in here too: which
+  // check reports it is a policy question (see policy.js), not a property of the
+  // repository.
+  const risky = once(() => [...everAdded()].filter((p) => categoryOf(p)).sort());
   // Rename detection costs a full history walk, so a repo with nothing risky in
   // it never pays for it. Laziness makes that automatic rather than hand-written.
   const renames = once(() => (risky().length ? renameGraph(dir) : new Map()));
@@ -90,12 +128,21 @@ export function snapshot(dir) {
 
     // Git
     isGitRepo: once(() => isGitRepo(dir)),
+    isBareRepo: once(() => isBareRepo(dir)),
+    dir: () => dir,
     tracked,
     trackedSet,
     committed: once(() => listCommitted(dir)),
     risky,
     ignored: once(() => ignoredPaths(dir, risky())),
-    limits: once(() => historyLimits(dir)),
+    // Forces the two reads that can overflow, so that "only part of the history
+    // can be checked" is already known by the time this is reported — the
+    // history-scope check runs before the checks that would hit the overflow.
+    limits: once(() => {
+      tracked();
+      everAdded();
+      return [...historyLimits(dir, context()), ...limitations];
+    }),
     // Where one risky path lives, with the names it shares content with and
     // whether it is still in the working tree. Memoised per path: the three
     // category checks between them describe each path once.

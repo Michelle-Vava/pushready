@@ -1,0 +1,140 @@
+# clean-node — A tidy Node project: nothing to fix
+# expects exit 0
+
+=== pushready <repo> (exit 0) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✔ No private key files in git history
+  ✔ No credential files in git history
+  ✔ No data files in git history
+
+  Ready to make public: yes
+  9 passed, 0 warnings, 0 failed
+
+=== pushready <repo> --history (exit 0) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✔ No private key files in git history
+  ✔ No credential files in git history
+  ✔ No data files in git history
+
+  Ready to make public: yes
+  9 passed, 0 warnings, 0 failed
+
+=== pushready <repo> --json (exit 0) ===
+{
+  "version": "<version>",
+  "dir": "<repo>",
+  "findings": [
+    {
+      "id": "readme",
+      "title": "README",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "README.md found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "license",
+      "title": "LICENSE",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "LICENSE found (MIT)",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "gitignore",
+      "title": ".gitignore",
+      "severity": "blocker",
+      "status": "pass",
+      "message": ".gitignore found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "env-tracked",
+      "title": "Committed secrets",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No .env files committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "dependencies-tracked",
+      "title": "Committed dependencies",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No dependencies or build output committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-scope",
+      "title": "Git history available",
+      "severity": "info",
+      "status": "pass",
+      "message": "Full git history available",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-keys",
+      "title": "Private keys in history",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No private key files in git history",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-credentials",
+      "title": "Credential files in history",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No credential files in git history",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-data",
+      "title": "Database files in history",
+      "severity": "warning",
+      "status": "pass",
+      "message": "No data files in git history",
+      "fix": null,
+      "items": []
+    }
+  ],
+  "guide": null,
+  "verdict": {
+    "ready": true,
+    "exit": 0,
+    "blockers": 0,
+    "warnings": 0,
+    "unknown": 0,
+    "acknowledged": 0,
+    "skipped": 0,
+    "pushed": false,
+    "strict": false,
+    "line": "Ready to make public: yes"
+  },
+  "notRun": [],
+  "exit": 0
+}

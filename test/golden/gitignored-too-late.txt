@@ -1,0 +1,300 @@
+# gitignored-too-late — Secrets added to .gitignore after they were already committed
+# expects exit 1
+
+=== pushready <repo> (exit 1) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✖ 1 private key file in git history
+      deploy.pem — still in the repo, on main, local only
+      → These names are normally used for private keys. Deleting the file in a later commit does not remove it — see "What to do next" below.
+  ✖ 1 credential file in git history
+      .env.local — deleted, on main, local only
+      → These names are normally used for logins or API tokens. Deleting the file in a later commit does not remove it — see "What to do next" below.
+  ✔ No data files in git history
+
+  What to do next
+    1. None of these were pushed from this clone, so they probably never left your machine.
+       Run "git fetch" if you are not sure, and rotate anything you cannot account for.
+    2. .gitignore already lists deploy.pem, .env.local, but that does not undo anything git has already recorded.
+       It only stops a file being added in future: it does not remove anything from history.
+       It also has no effect on a file git already tracks, which is why deploy.pem is still in the repo.
+       Untrack it first: git rm --cached "deploy.pem"
+    3. Remove deploy.pem, .env.local from history yourself — pushready will not do it for you:
+       git filter-repo --invert-paths --path "deploy.pem" --path ".env.local"
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Run again with --history for the full guide.
+
+  Ready to make public: no (2 blockers)
+  7 passed, 0 warnings, 2 failed
+
+=== pushready <repo> --history (exit 1) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✖ 1 private key file in git history
+      deploy.pem
+          status     still in the repo
+          exposure   local only — this repo has no remote, or the file is only in a stash (which is never pushed), so it has not left here
+          added in   <sha>
+          branches   main
+          remotes    none
+          gitignore  listed — but .gitignore does not untrack a file git already has
+      → These names are normally used for private keys. Deleting the file in a later commit does not remove it — see "What to do next" below.
+  ✖ 1 credential file in git history
+      .env.local
+          status     deleted, but still in history
+          exposure   local only — this repo has no remote, or the file is only in a stash (which is never pushed), so it has not left here
+          added in   <sha>
+          branches   main
+          remotes    none
+          gitignore  listed — but .gitignore does not remove it from history
+      → These names are normally used for logins or API tokens. Deleting the file in a later commit does not remove it — see "What to do next" below.
+  ✔ No data files in git history
+
+  What to do next
+    1. None of these were pushed from this clone, so they probably never left your machine.
+       Run "git fetch" if you are not sure, and rotate anything you cannot account for.
+    2. .gitignore already lists deploy.pem, .env.local, but that does not undo anything git has already recorded.
+       It only stops a file being added in future: it does not remove anything from history.
+       It also has no effect on a file git already tracks, which is why deploy.pem is still in the repo.
+       Untrack it first: git rm --cached "deploy.pem"
+    3. Remove deploy.pem, .env.local from history yourself — pushready will not do it for you:
+       git filter-repo --invert-paths --path "deploy.pem" --path ".env.local"
+       git filter-repo is not part of git; install it first.
+       Run it on a fresh clone. It refuses to rewrite a repo with other changes unless you pass --force,
+       and it removes the "origin" remote afterwards, so add it back before pushing.
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Docs: https://github.com/newren/git-filter-repo#how-do-i-install-it
+
+  Ready to make public: no (2 blockers)
+  7 passed, 0 warnings, 2 failed
+
+=== pushready <repo> --json (exit 1) ===
+{
+  "version": "<version>",
+  "dir": "<repo>",
+  "findings": [
+    {
+      "id": "readme",
+      "title": "README",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "README.md found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "license",
+      "title": "LICENSE",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "LICENSE found (MIT)",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "gitignore",
+      "title": ".gitignore",
+      "severity": "blocker",
+      "status": "pass",
+      "message": ".gitignore found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "env-tracked",
+      "title": "Committed secrets",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No .env files committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "dependencies-tracked",
+      "title": "Committed dependencies",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No dependencies or build output committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-scope",
+      "title": "Git history available",
+      "severity": "info",
+      "status": "pass",
+      "message": "Full git history available",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-keys",
+      "title": "Private keys in history",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "1 private key file in git history",
+      "fix": "These names are normally used for private keys. Deleting the file in a later commit does not remove it — see \"What to do next\" below.",
+      "items": [
+        {
+          "path": "deploy.pem",
+          "present": true,
+          "commit": "<sha>",
+          "branch": "main",
+          "branches": [
+            "main"
+          ],
+          "remotes": [],
+          "tags": [],
+          "refs": [],
+          "stashes": [],
+          "place": "branch",
+          "onCurrentBranch": true,
+          "exposure": "local only",
+          "aliases": [],
+          "kind": "credential",
+          "ignored": true,
+          "acknowledged": false,
+          "reason": ""
+        }
+      ]
+    },
+    {
+      "id": "history-credentials",
+      "title": "Credential files in history",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "1 credential file in git history",
+      "fix": "These names are normally used for logins or API tokens. Deleting the file in a later commit does not remove it — see \"What to do next\" below.",
+      "items": [
+        {
+          "path": ".env.local",
+          "present": false,
+          "commit": "<sha>",
+          "branch": "main",
+          "branches": [
+            "main"
+          ],
+          "remotes": [],
+          "tags": [],
+          "refs": [],
+          "stashes": [],
+          "place": "branch",
+          "onCurrentBranch": true,
+          "exposure": "local only",
+          "aliases": [],
+          "kind": "credential",
+          "ignored": true,
+          "acknowledged": false,
+          "reason": ""
+        }
+      ]
+    },
+    {
+      "id": "history-data",
+      "title": "Database files in history",
+      "severity": "warning",
+      "status": "pass",
+      "message": "No data files in git history",
+      "fix": null,
+      "items": []
+    }
+  ],
+  "guide": {
+    "steps": [
+      {
+        "id": "rotate",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "None of these were pushed from this clone, so they probably never left your machine."
+          },
+          {
+            "kind": "manual",
+            "text": "Run \"git fetch\" if you are not sure, and rotate anything you cannot account for."
+          }
+        ]
+      },
+      {
+        "id": "gitignore-too-late",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": ".gitignore already lists deploy.pem, .env.local, but that does not undo anything git has already recorded."
+          },
+          {
+            "kind": "manual",
+            "text": "It only stops a file being added in future: it does not remove anything from history."
+          },
+          {
+            "kind": "manual",
+            "text": "It also has no effect on a file git already tracks, which is why deploy.pem is still in the repo."
+          },
+          {
+            "kind": "run",
+            "text": "Untrack it first: git rm --cached \"deploy.pem\"",
+            "command": "git rm --cached \"deploy.pem\""
+          }
+        ]
+      },
+      {
+        "id": "rewrite",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "Remove deploy.pem, .env.local from history yourself — pushready will not do it for you:"
+          },
+          {
+            "kind": "run",
+            "text": "git filter-repo --invert-paths --path \"deploy.pem\" --path \".env.local\"",
+            "command": "git filter-repo --invert-paths --path \"deploy.pem\" --path \".env.local\""
+          },
+          {
+            "kind": "manual",
+            "text": "git filter-repo is not part of git; install it first."
+          },
+          {
+            "kind": "manual",
+            "text": "Run it on a fresh clone. It refuses to rewrite a repo with other changes unless you pass --force,"
+          },
+          {
+            "kind": "manual",
+            "text": "and it removes the \"origin\" remote afterwards, so add it back before pushing."
+          }
+        ]
+      }
+    ],
+    "links": [
+      "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository",
+      "https://github.com/newren/git-filter-repo#how-do-i-install-it"
+    ],
+    "detailed": true
+  },
+  "verdict": {
+    "ready": false,
+    "exit": 1,
+    "blockers": 2,
+    "warnings": 0,
+    "unknown": 0,
+    "acknowledged": 0,
+    "skipped": 0,
+    "pushed": false,
+    "strict": false,
+    "line": "Ready to make public: no (2 blockers)"
+  },
+  "notRun": [],
+  "exit": 1
+}

@@ -3,9 +3,10 @@
 Working log for pushready, updated as we go. [ROADMAP.md](ROADMAP.md) is the plan;
 this file is where we are in it, and why things were decided the way they were.
 
-**Now working on:** v0.3, as point releases. **v0.3.0 is cut** (module split + shared
-snapshot, no behaviour change). **v0.3.1 is next:** fix the gaps a review of v0.3.0 found,
-before any new feature is built on top of them. ROADMAP.md has each release's criteria.
+**Where things stand:** v0.3 is complete at pushready **0.3.6** (1 Nov 2026) — the check
+framework, the flags, `--json`, the guide as rules, the five review gaps closed, and the
+suite portable to Windows, macOS and Node 18–24. **Next:** v0.4, the pre-push hook. The
+"Status at a glance" dashboard at the top of ROADMAP.md is the quickest picture.
 
 ---
 
@@ -357,27 +358,625 @@ tag no longer appears.
 Also in this cut: `cli.js` gained the module header it was missing, and every module now
 opens with what it is for.
 
+### v0.3.1, first half — the six small gaps (31 Oct 2026)
+
+The eleven items were sorted by how much they touch before any were fixed: six are each
+one file and a few lines, two cross files (#4 fsck, #5 guide ids), and three are one
+architectural change (#1 severity, #2 and #3 the policy pass). The six went first, so that
+the output diff against v0.3.0 stays small and attributable, and the hard ones land on a
+clean base.
+
+Each got a test that was seen failing against v0.3.0 (5 of 6; the id-uniqueness test is a
+guard and had nothing to fail on). 58 tests, all passing.
+
+| # | Fix | Where |
+|---|---|---|
+| 6 | The tag hedge ("this clone keeps no record of which tags were pushed") now covers data files too; for data the closing advice is "treat it as pushed" rather than "rotate it" | `guide.js`, `tagHedge()` |
+| 7 | The acknowledged heading says "in this repository, outside its history" when every acknowledged item is in a stash, a leftover ref, a detached HEAD or an unreachable commit, as the open-findings heading already did | `checks.js`, `whereOf()` |
+| 8 | Anything starting with `-` that is not `--history`, `-h`, `--help`, `-v` or `--version` exits 64 with `pushready: unknown option: --hsitory`. `--json` is refused the same way until v0.3.2 adds it | `cli.js` |
+| 9 | The summary appends "N skipped" when any check was skipped, so a non-git folder reads "1 passed, 0 warnings, 2 failed, 6 skipped" | `cli.js` |
+| 10 | Check ids are asserted unique | test only |
+| 11 | A `.gitignore` line counts only if it is a rule that would ignore the name: comments, blank lines and `!` negations do not, and nor does a rule for a different name (`.env.local` does not ignore `.env`). `.env`, `/.env`, `.env*`, `*.env`, `node_modules`, `node_modules/`, `/node_modules` and `**/node_modules/` all still count | `checks.js`, `ignores()` and `globToRegExp()` |
+
+**Side-by-side against v0.3.0:** all 15 scenarios, plain and `--history`, 30 comparisons,
+0 differences, and every scenario still exits as declared (re-run after #4 below: still 0).
+No scenario exercises any of the six changed paths, which is the point: the lines that
+*would* differ are exactly
+
+- the summary line, only when something was skipped (non-git folder);
+- the `history-*` heading, only when every finding is acknowledged and none is in history;
+- the guide's data step, only for a data file that is on a tag and nowhere else;
+- the `.gitignore` check, only when the file mentioned `.env` or `node_modules` without a rule for it;
+- the whole run, only when an unknown option was passed (exit 64 instead of running).
+
+One behaviour change is worth calling out: a `.gitignore` containing only `.env.local` or
+`.env.*` used to pass the check and now warns that `.env` itself is not ignored. That is
+the intended reading of "require a pattern that would actually match".
+
+### v0.3.1 — #4, one fsck per run (31 Oct 2026)
+
+`unreachableCommits()` now returns `{ commits, ok }`, `repoContext()` carries `fsckFailed`,
+and `historyLimits(dir, context)` reads that instead of running fsck again to find out.
+`snapshot.limits` passes the memoised context through. The failure path (fsck fails →
+"unreachable commits could not be listed" limit) kept its behaviour and gained its first
+test, by handing `historyLimits` a context with `fsckFailed: true`.
+
+The counting test uses `GIT_TRACE`, which every git on every CI platform honours, rather
+than a shim on `PATH`, which Windows would not. Measured on the demo scenarios (built-in
+git commands per run, from the same trace):
+
+| Scenario | v0.3.0 | now |
+|---|---|---|
+| clean-node | 17 git calls, 2 fsck | 13 git calls, 1 fsck |
+| messy-node | 24 git calls, 2 fsck | 20 git calls, 1 fsck |
+
+Four processes per fsck, because fsck itself spawns `refs verify`, `commit-graph verify`
+and `multi-pack-index verify`. Output: 30 comparisons against v0.3.0, 0 differences.
+60 tests, all passing.
+
+### Found while here: a pushed `.env` that is still tracked is under-reported (31 Oct 2026)
+
+Reproduced: commit `.env`, push, run pushready. It says "Secret file(s) committed: .env"
+with the git-rm advice, then "✔ No credential files in git history", no exposure, no
+"What to do next", exit **1**. Run `git rm --cached .env`, commit, run again: "1 credential
+file in git history — deleted, on master, **pushed**", the full rotate / filter-repo /
+force-push guide, exit **2**. Same leak, and the version where the file is *still in the
+repo* is the one that is told less.
+
+Cause: `snapshot.risky()` drops a tracked `.env` so that `env-tracked` is its only
+reporter, but `env-tracked` has no `items`, so nothing downstream (the guide, the "pushed"
+exit code) ever learns where the file is or whether it was pushed. This is gap #2 with a
+concrete victim, and it sharpens what the policy pass has to do: not *drop* the duplicate
+but *merge* it, so `env-tracked` keeps its finding and gains the history items. It also
+means #5 (grouping the guide by category `kind` rather than by check id) has to land first,
+because the guide must treat `env-tracked`'s items as credentials without knowing the id.
+The test is written and marked `todo` at the end of the suite; it fails today for all four
+reasons above, and is the acceptance test for #2.
+
+### v0.3.1, second half — category metadata and the policy pass (31 Oct 2026)
+
+The four remaining items, in two steps, each with its tests seen failing first.
+
+**#5 and #1, category metadata.** Each entry in `RISKY_CATEGORIES` now has `severity`
+(`blocker` / `warning`, the v0.3.2 vocabulary, so it is not renamed twice) and `kind`
+(`credential` / `data`). Every check has a `severity`, and every result carries it next to
+`status`, placeholders included, so "a blocker that passed" is `{ severity: 'blocker',
+status: 'pass' }`. The non-category checks were given the severity that matches what they
+do today: `blocker` for anything that can fail the run, `warning` for the `.pushready.json`
+diagnostic, `info` for history-scope, which only ever says "unknown". Whether README and
+LICENSE deserve `blocker` is a v0.3.2 question, noted there.
+
+Items carry `kind`, and the guide groups by it instead of by check id. Anything that is not
+`data` gets the credential advice, the stronger one, so a kind the guide has no words for is
+never dropped. The test builds one finding per category and asserts the guide names it.
+
+**#2 and #3, the policy pass** (`src/policy.js`, called at the end of `runChecks`). Checks
+that report items now have `run`, which gathers, and `summarise(items, snap, policy)`, which
+decides status and heading. The pass walks results in registration order, drops any item
+whose path an earlier result already reported, marks the rest acknowledged from
+`.pushready.json`, and calls `summarise` again with what is left. Two consequences:
+
+- `snapshot.risky()` no longer hides a tracked `.env`. `env-tracked` reports it with its
+  history items (it declares `risky`, `describe` and `ignored` for that), and
+  `history-credentials` says "No *other* credential files in git history" when everything
+  it found was already reported. Running every check except `env-tracked` makes
+  `history-credentials` report the `.env` instead, which is what `--skip` needs.
+- Acknowledgement reaches every check. A tracked fixture `.env` is acknowledged by path;
+  a vendored `node_modules` by the path `node_modules`, since that check has no items.
+  A fixture `.env` does not excuse a real one next to it.
+
+**The pushed, still-tracked `.env`** now gets its exposure line, step 1 "Rotate or revoke",
+the `filter-repo` command and exit 2, the same as after `git rm --cached`. The `todo` test
+is a real test.
+
+**Side-by-side against v0.3.0:** 30 comparisons, 4 differ, all in `messy-node` and
+`gitignored-too-late`, the two scenarios with a tracked `.env`, and only in these lines:
+
+- under "Secret file(s) committed", the item line (or `--history` block) for the tracked `.env`;
+- "No credential files in git history" → "No other credential files in git history", when
+  the tracked `.env` was the only credential (`gitignored-too-late`);
+- the guide's `.gitignore` step and `git rm --cached` command now also name the tracked `.env`
+  when `.gitignore` lists it;
+- the `filter-repo` command now includes the tracked `.env`.
+
+Every scenario still exits as declared. README's "real output" block was regenerated.
+67 tests. `grep TODO(v0.3.1) src/` returns nothing; `package.json` says 0.3.1.
+
+Noticed while reading the diff, not fixed: the `gitignored-too-late` scenario means to
+untrack `.env.local` with `git rm --cached`, but the scenario helper's `commit()` runs
+`git add -A -f`, which re-adds it. So `.env.local` is still tracked in that scenario, and
+the "wrong fix" it describes is only demonstrated by `deploy.pem`. See the test and
+scenario review below.
+
+### Strengthening the tests, and what that found (31 Oct 2026)
+
+The suite went from 67 tests to **139**, in six files instead of one, and the demo
+scenarios went from asserting an exit code to asserting every line they print. 32 seconds
+for the lot.
+
+**The change that matters most: scenarios now have recorded output.** `scripts/golden.js`
+runs each scenario plain and with `--history`, normalises the temp path and commit hashes,
+and writes the whole report to `test/golden/<name>.txt`. `test/golden.test.js` compares;
+`npm run golden` re-records. Two runs of the generator produce identical files, so the
+recordings are stable rather than merely plausible.
+
+This was not theoretical. The `gitignored-too-late` scenario had never demonstrated what
+its title claims: it ran `git rm --cached .env.local`, then called the `commit()` helper,
+which does `git add -A -f` and put the file straight back. Three releases of "all scenarios
+exit as declared" passed over it, because the exit code was 1 either way. Fixed with a
+`commitStaged()` helper, and the scenario now shows what it always meant to — the file
+untracked but still in history, reported by `history-credentials` rather than `env-tracked`,
+with the guide separating "still in the repo, needs git rm --cached" from "already deleted".
+
+**New test files.** `test/helpers.js` holds the fixtures the old suite had inline, so the
+new files share them instead of copying:
+
+| File | Tests | What it is for |
+|---|---|---|
+| `checks.test.js` | 71 | What the checks find. The original suite, plus the cleanup-command limits |
+| `cli.test.js` | 17 | Flags, the path argument, printed output, exit codes |
+| `repo-states.test.js` | 9 | No commits, branches, a branch only a remote has |
+| `config.test.js` | 10 | `.pushready.json`, mostly malformed |
+| `languages.test.js` | 10 | Python, .NET, Java, Go, Ruby, Terraform |
+| `scale.test.js` | 5 | What a run costs, in git processes |
+| `golden.test.js` | 16 | Every scenario's full recorded output |
+
+**Specifically requested, and what each one turned up:**
+
+- **CLI flags.** `--help` and `-h`, `--version` and `-v`, path before or after flags, a
+  relative path, and a test that the options listed in `--help` are exactly the options the
+  parser accepts — drift in either direction fails. Also that `--help` documents all four
+  exit codes, and that a rejected option checks nothing at all (empty stdout, exit 64).
+- **No commits.** A repository with no commits, and one with a staged `.env` before the
+  first commit, are both handled: history checks pass rather than erroring, and the `.env`
+  is correctly called *staged, not yet committed*. Nothing asserted this before.
+- **Default path.** Running with no argument checks the current folder; with an argument,
+  that folder instead, verified from a different working directory so one cannot pass by
+  accident. `.pushready.json` is read from the repo being checked, not from where you stand.
+- **Branches.** A secret on a second branch names that branch and not the one checked out;
+  on three branches it says `+2`; a deleted branch becomes `unreachable`; and the default
+  branch name (`main`, `master`, `trunk`) makes no difference.
+- **Messy configuration.** Both acknowledgement spellings, a reason shown or defaulted,
+  broken JSON, JSON that is valid but not an object, unusable entries mixed with good ones,
+  a stale path, near-miss paths that must not inherit an acknowledgement, and an empty list.
+- **Cleanup guidance past eight paths.** Eight paths inline, nine or more as
+  `--paths-from-file paths.txt`, the paths still printed so the file can be written, and the
+  limit counting a renamed file's *other* names too — seven findings with two renames is
+  nine paths and correctly switches to the file list.
+- **Languages other than JavaScript.** The scenarios covered Python; the unit tests were
+  entirely Node fixtures. Now Python, .NET, Java, Go, Ruby, Terraform and Kubernetes names
+  are covered, along with `README.rst` and `COPYING`.
+
+**Four findings worth acting on, recorded as tests that pin today's behaviour:**
+
+1. **A CA bundle in a committed venv is reported as a private key.** `certifi` ships
+   `cacert.pem` inside every Python virtualenv. A beginner who commits their venv — the
+   exact mistake `messy-python` is about — is told to rewrite history for a public
+   certificate. `*.pem` is in the private-key category and `.pub`/`.crt`/`.cer` are the only
+   exclusions. Worth a path-aware exclusion (inside `venv/`, `site-packages/`,
+   `node_modules/`) or a content-free name heuristic (`cacert`, `ca-bundle`).
+2. **A committed `venv/` or `bin/`+`obj/` is not reported at all**, while a committed
+   `node_modules` fails the run. A Python project that commits its virtualenv gets exit 0.
+   This is the v1.0 "Python and .NET projects" item, and it is a bigger gap than it looks:
+   it is the most common beginner mistake in those ecosystems.
+3. **A config of the wrong shape says nothing.** `{"acknowledge": "path"}` or a misspelled
+   `"acknowledged"` parses fine, acknowledges nothing, and produces no diagnostic — the run
+   just fails and the user has no idea their file was ignored. Broken JSON *is* reported, so
+   the quiet case is the inconsistent one.
+4. **A second path argument is silently ignored.** `pushready . ../other` checks only the
+   first. Unknown *options* now exit 64; unknown extra *paths* still do not.
+
+Two smaller ones, noted in the tests where they live: a secret on a branch only a remote has
+is correctly called `pushed`, but the item line says "deleted", which means "not in your
+working tree" and reads oddly for a file alive on someone else's branch; and a
+`.pushready.json` of `null` surfaces a raw JavaScript error message.
+
+### The `large` scenario, reviewed (31 Oct 2026)
+
+It builds 604 files over 42 commits and asserts one thing: exit 1. It is also misnamed — it
+is a test of *many* files, not of large ones, and pushready has no size check at all yet.
+As of this cut it does at least assert its full output, like every other scenario.
+
+Measured rather than guessed, with `GIT_TRACE` and `time`:
+
+| | Wall clock | git processes |
+|---|---|---|
+| `clean-node` (6 files, 1 commit) | 820 ms | 13 |
+| `large` (604 files, 42 commits) | 1,294 ms | 13 |
+| Repo with a committed 60 MB binary | 881 ms | 13 |
+| 1 risky path | 758 ms | 17 |
+| 10 risky paths | 1,084 ms | 35 |
+| 50 risky paths | 2,211 ms | 115 |
+| 100 risky paths | 3,227 ms | 215 |
+
+The conclusions, now in ROADMAP.md under **v0.6** and **Large repositories**:
+
+- **Repository size is already cheap and must stay that way.** 10 files to 2,000 changes the
+  process count not at all, because every path comes out of one `git log`. `scale.test.js`
+  asserts it.
+- **The cost grows with findings, not with the repo** — two git processes per risky path, so
+  100 findings is 215 processes. Batching the location queries by commit is the fix.
+- **A large file costs nothing to check, because pushready never opens one.** Sizes come
+  from `git cat-file --batch-check --batch-all-objects` (11 ms on a 60 MB repo) and paths
+  from `git rev-list --objects --all` (10 ms). The v0.6 check is therefore two constant-cost
+  calls and does *not* widen the privacy boundary: it adds object sizes, not contents.
+- **The thresholds need deciding, not inheriting.** GitHub warns at 50 MB and blocks at
+  100 MB; the roadmap's 5 MB is a hygiene number. Proposed: warn at 5 MB, fail at 50 MB, and
+  do not report a file that Git LFS is correctly handling.
+- **`maxBuffer` is the one real robustness risk.** `src/git.js` buffers every command with a
+  64 MB limit, and `listEverAdded` and `listTracked` are unguarded, so a big enough
+  repository exits with an `ENOBUFS` stack trace rather than a finding. `cat-file
+  --batch-all-objects` prints a line per object (~1.1M objects to hit the limit) and would
+  become the most output-heavy command pushready runs, so the large-files check should
+  stream. Either way, `ENOBUFS` belongs in `historyLimits` as "could not be checked".
+
+Recommended but not done, because it churns file names: rename the scenario to `many-files`
+and let `large-files` mean the v0.6 one.
+
+### Flags, git states, and config scenarios (31 Oct 2026)
+
+164 tests across eight files, 19 scenarios. Three areas asked for, each of which turned up
+something.
+
+**`--help`, `--version`, `--json`.** The three a user or a CI script reaches for first, now
+treated as a contract rather than incidental output.
+
+- `--help` is asserted to document all four exit codes *with their meanings*, every
+  exposure word (`local only`, `not on a remote`, `pushed`), acknowledgement, stashes, and
+  both privacy promises. It also wins over everything else on the command line, including a
+  bad path and an unknown option — asking for help always works.
+- `--version` prints the version and nothing else, matched against `^\d+\.\d+\.\d+$`, with
+  empty stderr, so `pushready --version` is safe to read in a script. It agrees with
+  `package.json`, and `--help`'s banner agrees with both.
+- `--json` does not exist yet, and there is now a test saying so out loud: exit 64, **empty
+  stdout**, the flag named on stderr. A CI step piping pushready into a parser must break at
+  the flag, not three lines into parsing a human-readable report. The same test covers every
+  flag the roadmap promises (`--quiet`, `--strict`, `--only`, `--skip`, `--fix`,
+  `--no-color`), so when one lands its line fails and the reminder to document it is
+  automatic. `--only=readme` is rejected by its whole name too.
+
+**Git history and branch edge cases** (`test/git-states.test.js`, 14 tests). States git
+allows but a tool rarely expects, each changing the answer to "what holds this commit?":
+
+- Detached HEAD, four ways: a commit held only by HEAD (`place: 'head'`, advice is "check
+  out a branch", never `filter-repo`); a detached HEAD on a commit a branch also holds
+  (still `branch`); detached at a tag (the tag wins, because it outlives the checkout);
+  and walking away from a detached commit, which correctly becomes `unreachable`.
+- Orphan branch, annotated tag, packed refs (`git pack-refs --all` moves refs out of loose
+  files and must not hide anything), and a remote that exists but has never been fetched —
+  which must stay `not on a remote` and exit 1, not be guessed as pushed.
+- A conflicted **merge in progress** and a stopped **rebase in progress**: both leave the
+  index and HEAD in an odd state, and both still produce correct findings.
+- A **linked worktree**, where `.git` is a file rather than a folder, works correctly.
+- A path containing a space, and a secret still pushed after its local branch is deleted.
+
+**New scenarios** (19 total), with their full output recorded like the rest:
+
+| Scenario | What it demonstrates |
+|---|---|
+| `broken-config` | `.pushready.json` with a trailing comma: warns, names the file, acknowledges nothing, still fails |
+| `misshaped-config` | `"acknowledge"` as a string: parses, acknowledges nothing, **says nothing at all** |
+| `no-commits` | A brand new repo, files staged and never committed: "staged, not yet committed" |
+| `detached-head` | A key committed while detached: "check out a branch", no history rewrite |
+
+`broken-config` and `misshaped-config` sit next to each other on purpose. Reading the two
+recordings side by side is the clearest statement of the inconsistency found last round: one
+warns, the other is silent, and only the user of the silent one is left wondering why their
+file had no effect.
+
+**One more finding: a bare repository is reported misleadingly.** Run pushready on a
+`repo.git` and it says "No README found", "No LICENSE file", "No .gitignore" and skips six
+checks — because a bare repo has no working tree and `rev-parse --is-inside-work-tree`
+answers "false". Nothing in the output tells you it is a bare repo. It should say so and
+point at a clone instead. Pinned by a test, added to the open-gaps list.
+
+**Open gaps, all pinned by tests, in rough order of how much they would bite a beginner:**
+
+| # | Gap | Where it shows |
+|---|---|---|
+| 1 | A committed `venv/` or `bin/`+`obj/` is not reported, while `node_modules` fails the run | `languages.test.js` |
+| 2 | `cacert.pem` inside a committed venv is reported as a private key | `languages.test.js` |
+| 3 | A misshaped `.pushready.json` acknowledges nothing and says nothing | `config.test.js`, `misshaped-config` |
+| 4 | A bare repository is reported as a project missing its README | `git-states.test.js` |
+| 5 | A second path argument is silently ignored | `cli.test.js` |
+| 6 | "deleted" is printed for a file alive on someone else's branch | `repo-states.test.js` |
+| 7 | An oversized git output crashes with `ENOBUFS` instead of reporting a limit | ROADMAP, Large repositories |
+
+### Two reported bugs (31 Oct 2026)
+
+Both reported from use, both reproduced before being touched.
+
+**A secret first introduced inside a merge commit was not found.** `git log` shows no file
+changes for a merge commit unless asked, so a key typed in while resolving a conflict — one
+that exists in no commit on either side — was invisible to every history walk, and the run
+said "No private key files in git history". Fixed by adding `-m` to the three walks
+(`listEverAdded`, `renamePairs`, and the per-path `addedIn`), which diffs a merge against
+each parent. A file that came in from one side now appears twice, which a Set absorbs.
+Tests: a key born in a merge, and a rename done inside a merge.
+
+**Running on a subfolder gave a broken report.** Pointing pushready at `src/` reported
+`src/.env` twice — once as `.env` (tracked, path relative to `src/`) and once as
+`src/.env — deleted, on no branch` (history, path relative to the root) — and said the
+README, LICENSE and `.gitignore` at the root were missing. Cause: `git ls-files` returns
+paths relative to the folder it runs in; every other git question answers relative to the
+root. Fixed with `repositoryRoot(dir)`, a filesystem walk up to the nearest `.git` (file or
+folder, so linked worktrees count) that spawns no git process, so file-only checks stay free
+of git. The CLI checks the root and prints `src is inside this repository, so the whole
+repository is checked`; the library does the same, so `runChecks('repo/src')` equals
+`runChecks('repo')`. A folder with no `.git` above it is unchanged.
+
+### v0.3.2 and v0.3.3 (31 Oct 2026) — the framework is usable from the command line
+
+Done together because they share the finding shape and the exit-code contract. 194 tests
+across nine files; 19 scenarios, each recorded three ways.
+
+**v0.3.2.** Every check has `title` and (where it needs a repository) `appliesTo(snap)`,
+which returns `true` or the reason it does not apply; `needsGit` is gone. `src/finding.js`
+is the one documented shape, `{ id, title, severity, status, message, fix, items }`, built in
+one place and used by `runChecks` and the policy pass alike, so a skip placeholder and a
+real finding have the same keys (`fix: null`, `items: []`). A test asserts every result,
+whatever its status, has exactly those keys, and every item exactly `ITEM_KEYS`.
+
+`--only` and `--skip` select from the registry by id (commas, repeats or `=`), refuse an
+unknown id by name with the valid ids listed, and leave the summary saying `N not run`.
+The policy pass still runs over what did run, so `--skip env-tracked` hands a committed
+`.env` to `history-credentials` rather than hiding it — tested. `--only readme` spawns no
+git process — tested with `GIT_TRACE`.
+
+`.pushready.json` gains `version` (absent means 1; newer warns and is applied where
+understood). While there, the config reader stopped being silent about the wrong *shape*:
+`"acknowledge": "path"` and a root that is not an object now warn with what was expected
+instead of a JavaScript error or nothing. That closes the gap the `misshaped-config`
+scenario was added to show; its title changed to match.
+
+**v0.3.3.** `src/verdict.js` decides the exit code and the verdict line once, for the text
+report and `--json` alike, with the contract written at the top of the file and in `--help`:
+
+| Question left open in the roadmap | Answer |
+|---|---|
+| Does `--skip` of a failing check lower the code? | Yes. The check did not run, so it cannot count. |
+| Does `--only` narrow what is reported? | Yes, and the summary says `N not run`. |
+| Does `unknown` ever fail? | Only under `--strict`. "Could not check" is not "found a problem". |
+| Does `--json` change the code? | Never. |
+
+`--json` prints `{ version, dir, findings, guide, verdict, notRun, exit }`, always the full
+guide, byte-stable across two runs (tested), and every scenario's recording now includes it,
+so any drift in the shape fails the suite. `--quiet` shows fail, warn and unknown and folds
+the rest away without uncounting them. `--strict` makes a warning or an unknown exit 1 and
+never lowers a 2. The verdict line sits above the summary — `Ready to make public: yes`,
+`no (1 blocker) — something was pushed, rotate first`, or `yes, as far as could be checked
+(4 could not be checked)` — and a test reads every recording to confirm the verdict, the
+text exit code and the JSON `exit` agree.
+
+**Decision recorded:** the human report is not regrouped into "Fix before making public"
+and "Good practice" sections. Registration order is output order, every recording depends
+on it, and the verdict line plus `severity` on every finding carry the same information.
+
+**Also closed:** a second path argument is now refused (`one path at a time`) instead of
+silently ignored.
+
+**Open gaps now**, each pinned by a test: a committed `venv/` or `bin/`+`obj/` is not
+reported (v1.0); `cacert.pem` inside a committed venv is reported as a private key; a bare
+repository is reported as a project missing its README; "deleted" is printed for a file
+alive only on someone else's branch; an oversized git output crashes with `ENOBUFS` rather
+than reporting a limit.
+
+### v0.3.4 and v0.3.5 — the guide as rules, and fix plans as data (1 Nov 2026)
+
+Done together: splitting the guide and changing what it returns touch the same lines, and
+doing them separately would have meant rewriting the same 200 lines twice.
+
+**v0.3.4.** `exposureGuide` was one function of about 200 lines with eight `if` blocks. It
+is now eight rules, each `{ id, appliesTo(context), build(context) }`, listed in `RULES` in
+the order the steps appear — which is the order the work has to be done in. `guideContext`
+slices the open findings the ways the rules ask about (by kind, by where the file lives,
+by whether .gitignore lists it) once, so no rule re-derives it.
+
+The acceptance test was that nothing changes for the user. The text report was compared
+against the recordings made before the split: **38 comparisons, 0 differences.**
+
+What this buys, concretely: the step order is now one readable line rather than an
+emergent property of eight `if` blocks, and a test asserts it directly
+(`['rotate', 'data', 'gitignore-too-late', 'drop-stash', 'rewrite', 'force-push']` on a repo
+that triggers six rules at once). Tests that used to match a blob of text now say
+`steps[0].id === 'rotate'`.
+
+**v0.3.5.** Every line a rule produces is now an action:
+
+```js
+{ kind: 'manual', text: 'They were pushed, so cleaning history will not un-leak them.' }
+{ kind: 'run',    text: 'Untrack it first: git rm --cached "k.pem"',
+                  command: 'git rm --cached "k.pem"' }
+```
+
+`text` is exactly what the report prints, so the text output is unchanged by construction.
+`command` is the runnable part with the prose stripped off, which is what `pushready fix`
+(v0.5) needs and what a `--json` consumer wants. `guideCommands(guide)` returns them in
+order; a test asserts every one starts with `git ` and none begins with a word like
+"Untrack" or "Drop", which would mean prose had leaked into a command.
+
+**`'edit'` is in the roadmap's action kinds but not in `ACTION_KINDS`.** No rule produces
+an edit — every step today is a git command or an explanation — and adding a kind nothing
+emits would be a shape with nothing guaranteeing it. It arrives with `pushready fix`.
+
+**The promise this rests on, now tested directly.** A run on a repo whose guide says to
+drop a stash, untrack a file and rewrite history: every file's size and modified time,
+`HEAD`, and the stash list are all asserted unchanged afterwards. pushready describes
+these commands; it has never run one, and now a test fails if that changes.
+
+**v0.3 is complete.** `grep TODO(v0.3 src/` returns nothing. 206 tests across ten files,
+19 scenarios recorded three ways each (plain, `--history`, `--json`), 13 modules, 1,722
+lines, no dependencies.
+
+### How the code changed across v0.3
+
+| | v0.2 (29 Oct) | v0.3.5 (1 Nov) |
+|---|---|---|
+| Modules | 2 | 13 |
+| Largest file | `checks.js`, 443 lines, holding patterns, git, history, the checks and the guide | `checks.js`, 356 lines, holding only the checks |
+| What a check receives | `dir`, so it could open anything | a snapshot it declared its reads from |
+| Cross-check decisions | inside whichever check got there first | one policy pass over the findings |
+| Result shape | whatever each check returned | one documented shape, built in one place |
+| Exit code | computed inline in `cli.js` | `verdict.js`, shared with `--json` |
+| Remediation | one 200-line function returning strings | 8 rules returning actions |
+| Output formats | text | text, `--json` |
+| Tests | 23 | 206 |
+
+The through-line: in v0.2 every module could do anything, so a rule like "never open a
+`.env`" or "report each path once" could only be a convention. Each v0.3 release moved one
+such rule into a place where it is the only way the code can work — and three of them were
+moved *because* a bug proved the convention had already been broken.
+
+### The five open gaps, closed (1 Nov 2026)
+
+Each was a problem *a user would hit*, found while testing rather than reported, and each
+had a test pinning the wrong behaviour so that fixing it would be a visible change.
+
+**1 & 2 — committed dependency trees, and the CA bundle inside them.** `node_modules`
+failed the run while a committed Python virtualenv passed clean, so a beginner who
+committed their venv — the exact mistake the `messy-python` scenario is about — got exit 0.
+Worse, `*.pem` matched `certifi/cacert.pem` inside that venv, so the one thing they *were*
+told was to rotate a key and rewrite history over a **public** certificate anyone can
+download.
+
+Both come from the same hole, so one fix closes both. `patterns.js` gained `vendoredOf()`,
+which recognises a committed dependency tree by **marker, not folder name**:
+
+| Ecosystem | Marker | Not matched |
+|---|---|---|
+| npm | a `node_modules/` segment | |
+| Python | `pyvenv.cfg`, or a `site-packages/` segment | |
+| Composer | `vendor/autoload.php` | a bare `vendor/` (Go vendoring is deliberate) |
+| Bundler | `vendor/bundle/` | |
+| .NET | `bin/Debug`, `bin/Release`, `obj/Debug`, `obj/project.assets.json` | a hand-written `bin/script.sh` |
+
+The check is now `dependencies-tracked` (was `node-modules-tracked`, renamed because the id
+had become a lie; nothing is published, so nothing depends on the old name). It names the
+*root folder* and its file count — `venv (1,203 files) is committed — an installed Python
+environment` — and gives one `git rm -r --cached` for all of them.
+
+Files inside such a tree are no longer matched individually, and the fix line says so:
+*"Files inside are not checked one by one: untrack the folder, then run pushready again."*
+CA bundles (`cacert.pem`, `ca-bundle.crt`, Java's `cacerts`) are never flagged anywhere.
+A real `server.key` sitting next to a `cacert.pem` still is.
+
+**3 — a bare repository.** `pushready repo.git` reported "No README found", "No LICENSE
+file" and exited 1. None of that is about the project; a bare repo has no working tree.
+Now the CLI refuses it: *"repo.git is a bare repository, which has no working tree. Run
+pushready on a clone of it instead."*, exit 64, nothing printed to stdout — so a CI step
+cannot read a green run as a check that happened. The library skips every check with the
+same reason instead of crashing.
+
+Detection is a filesystem test (`HEAD` + `objects/` + `refs/`, no `.git`), not
+`git rev-parse`, because the three file-only checks ask it before deciding whether they
+apply and must not spawn git to find out. Getting that wrong is what broke the "no git
+process for `--only readme`" guarantee halfway through this change; the test caught it.
+
+**4 — "deleted" for a file that was never here.** A key on a colleague's branch, fetched
+but not checked out, was printed as `their.pem — deleted, on origin/their-feature, pushed`.
+"Deleted" reads as *dealt with*, and it is the opposite: the file is alive on their branch
+and already on the remote. Items now carry `onCurrentBranch`, and the line reads
+`not in your checkout`. Free — it reuses refs already read, with no extra git call.
+
+**5 — `ENOBUFS` on a very large repository.** `execFileSync` buffers a command's whole
+output, and past 64 MB threw a Node stack trace that said nothing about which repository or
+why. `git()` now throws `GitOutputTooLarge`, the snapshot catches it around the two reads
+that can overflow, and the run reports a limit — so the category checks say *"0 private key
+files found, but the history is incomplete"* rather than the dangerous *"No private key
+files in git history"*. `PUSHREADY_MAX_BUFFER` exists so this is tested at 256 bytes
+instead of by building a 64 MB repository.
+
+### Portability: the suite ran on one platform and one Node (1 Nov 2026)
+
+Everything here had been developed on **Linux with Node 18**, while CI claimed Windows,
+macOS and Node 20/24. That is not a difference of degree: **CI would have failed on every
+Node 20+ runner**, and nobody would have known until the first push.
+
+| Problem | Why it breaks elsewhere |
+|---|---|
+| `JSON.parse`'s error text was passed through into the report, and recorded in a scenario | Node 18 says *"Unexpected token ] in JSON at position 46"*; Node 20 says *"Expected ',' or ']' after array element…"*. The recording could only match on one |
+| No `.gitattributes` | A Windows checkout rewrites the recordings to CRLF; every byte-for-byte comparison then fails |
+| Golden normalisation replaced a literal `/tmp/...` | macOS uses `/var/folders/...`, Windows `C:\Users\…\Temp` |
+| `dir.split('/').pop()`, `` `file://${path}` ``, `new URL(...).pathname` | All wrong on Windows, where a path has backslashes and a drive letter |
+| Fixtures ran `git init` with no branch name | The branch is whatever the machine's `init.defaultBranch` says — this machine gives `master`; tests mentioning `main` passed only because a push helper happened to create it |
+| `engines: ">=18"` but CI tested 20 and 24 only | A version claimed and never run |
+
+**Fixed.** pushready now words its own JSON error (*"it is not valid JSON (at character
+24)"*), which is both stable across Node versions and clearer than Node's. `.gitattributes`
+pins LF, and recordings are normalised on read as well as write. Golden normalisation
+replaces `os.tmpdir()` and collapses `\` after `<repo>`, so one recording is the truth on
+all three platforms. Fixtures always `git init -b main`. Helpers clean up with
+`maxRetries`, because Windows can hold a handle inside `.git` just after git exits. The CI
+matrix is now 3 platforms × Node 18, 20, 22, 24, and runs `npm run golden -- --check` so a
+platform difference in the output fails loudly on that platform.
+
+**Verified on Windows, for real.** This machine is WSL, so Windows Node 24.11 and Git for
+Windows 2.35 were reachable, and the whole suite was run under them from a copy of the tree
+in the Windows temp folder. **First run: 227 of 230.** The three failures were each the
+kind of thing only a different platform or Node shows:
+
+| Failure | Cause | Fix |
+|---|---|---|
+| a fixture named `say "hi".pem` | Windows forbids `"` in a file name; the *test* could not build its own fixture | a backtick, which is also hard to quote and legal everywhere |
+| `(at character 46)` missing from the JSON error | Node 24 words that error without a position at all, Node 18 with one — so the report depended on the Node version after all | the position is dropped; the message is `it is not valid JSON` on every Node |
+| the `broken-config` recording | same cause | re-recorded |
+
+**Second run: 230 of 230**, 19 recordings byte-identical to the ones made on Linux, in
+7 min 10 s (Linux: 32 s — Windows process creation is slower, and a run is mostly git
+processes). A runtime guard now refuses any fixture name Windows cannot create, on every
+platform, so that first failure cannot come back; and the Node-message guard already in the
+portability suite would have caught the second had it existed a day earlier.
+
+**Simulated for the rest.** macOS has not been run. Its two mechanisms — a temp folder
+under `/var/folders` and a symlinked `/tmp` — are the same code paths as Windows'
+backslashes and `C:\Users\…\Temp`, which did run, and were also exercised here with
+`TMPDIR` set to `/tmp/pr sim/témp dir` (a space and an accent) and `init.defaultBranch`
+forced to `trunk` and to `master`: all green, recordings identical. The one mechanism
+nothing local exercised is a git **checkout** converting the recordings to CRLF, because the
+Windows copy was made with `rsync`, not `git clone`; `.gitattributes` and normalise-on-read
+cover it twice, and CI's `actions/checkout` is where it will be seen.
+
+**What "supported" means now.** The tool itself has no platform-specific code: every
+question is asked of git, and paths are handled with `node:path`. The suite is portable by
+test, not by assumption, and CI runs it on Linux, macOS and Windows with Node 18, 20, 22
+and 24 — the oldest version `engines` claims and the newest current one. Until that CI run
+has gone green, "all tests pass on macOS" is an expectation with good evidence, not a
+result; "all tests pass on Windows" is a result.
+
+**And guarded.** `test/portability.test.js` runs everywhere. It tests the behaviour
+(a repo under an awkward path, CRLF `.gitignore` and README files, findings always using
+forward slashes) and scans pushready's own source for each habit above — plus, after the
+Windows run, fixture names Windows cannot create — so the same mistake fails on the
+author's machine rather than on someone else's. One test reads the CI workflow and fails if
+the matrix does not cover the oldest Node `engines` claims. 232 tests.
+
 ---
 
 ## In progress
 
-**v0.3.1 — close the gaps.** Not started. Eleven items, listed above and in ROADMAP.md,
-each needing a test that fails first. No new flag, check or output format. The
-side-by-side comparison against v0.3.0 is the acceptance test: it should differ only in
-the lines the fixes intentionally change, and that list goes here when the work is done.
-
----
-
-## Pending
-
-v0.3.2 (registry metadata, finding schema, `--only` / `--skip`, the exit-code contract,
-versioned `.pushready.json`), v0.3.3 (`--json`, `--quiet`, `--strict`, verdict), v0.3.4
-(remedies as rules), v0.3.5 (fix plans as data). Each has its own "Done when" in ROADMAP.md,
-and v0.3 as a whole has one at the end of that section.
+**v0.4 — pre-push hook.** Not started. `pushready install-hook` / `uninstall-hook`, working
+alongside existing hooks and Husky, checking only the commits being pushed so it stays
+quick on a big repo. Done when a repo with a committed `.env` cannot be pushed to a local
+remote while the hook is installed.
 
 ---
 
 ## Decisions
+
+Two product decisions were made during v0.3 without being put to the project owner first,
+and were put to them afterwards. Both were **confirmed, 1 Nov 2026**, and are recorded here
+in the owner's terms:
+
+**`.pushready.json` stays limited to `version` and `acknowledge`.** Check selection is done
+with `--only` and `--skip`; there is no config-based severity override or check selection
+for now. *Why:* a config that silences a check hides it from everyone reading the CI output,
+while a flag is visible in the command that ran. The v1.0 config item is where this gets
+reconsidered.
+
+**The report keeps its existing organisation.** Findings are not regrouped into "Fix before
+making public" and "Good practice". The distinctions that matter are **severity**, **status**
+and **exposure**, each already on every finding, and the guidance stays as one clear ordered
+set of steps.
 
 **The rule for what counts as a risky file.** A filename commonly used for secrets or
 personal data is flagged even though pushready can't confirm what's inside. Findings are
@@ -387,16 +986,17 @@ which is what the privacy boundary requires.
 
 **Categories are separate checks, not labels on one check.** *Why:* they need different
 severities. A leaked key is a blocker; a committed database needs judgement. One combined
-check would have to collapse those into a single status. Separate ids also make them
-individually skippable when v0.3 adds `--only` / `--skip`.
+check would have to collapse those into a single status. Separate ids are also what
+`--only` / `--skip` select by.
 
 **Database files warn rather than fail.** *Why:* unlike a key, leaked data can't be
 rotated, so there's no standard fix to point at. It needs the user to look at what's in it.
 
 **History checks cover files still in the repo, not just deleted ones.** *Why:* `git rm`
 doesn't remove a file from history, so "still in the repo" is the worse case, not an
-exemption. Reported with a `(still in the repo)` marker. The one exception is a tracked
-`.env`, which `env-tracked` already reports — it isn't repeated.
+exemption. Reported as "still in the repo" on the item line. A tracked `.env` is reported
+once, under `env-tracked`, with its history items; the policy pass is what stops
+`history-credentials` repeating it.
 
 **Rename detection is turned off, not followed.** `--no-renames`, rather than `--follow` or
 a rename graph. *Why:* the question a history check asks is "what names has this repo ever
@@ -474,14 +1074,12 @@ import. Renaming it to `index.js` now would make the split touch the tests, and 
 of stage 0 is that it does not. The rename happens in stage 1, when the import surface
 genuinely changes.
 
-**Severity and status are two axes, and the code currently has only one.**
-`RISKY_CATEGORIES[].status` is `'fail'` or `'warn'` — that is *severity*, a fixed property
-of the check, but it is named and used as *status*, which is what happened on this run.
-The six statuses the CLI renders (`pass` / `warn` / `fail` / `unknown` / `acknowledged` /
-`skip`) are the second axis. *Why it matters now:* there is no way to express "this check
-is a blocker, and it passed", which `--strict`, the JSON schema and the verdict line all
-need. Splitting them is stage 2 work, recorded here because the conflation is easy to
-mistake for a naming quibble.
+**Severity and status are two axes.** `severity` (`blocker` / `warning` / `info`) is a
+fixed property of a check; `status` (`pass` / `warn` / `fail` / `unknown` / `acknowledged` /
+`skip`) is what happened on this run. Every finding carries both, so "this check is a
+blocker, and it passed" is expressible — which `--strict`, `--json` and the verdict line
+all rely on. *History:* until v0.3.1 the code had only one field, named `status` but used
+as a severity; the conflation was easy to mistake for a naming quibble.
 
 **The fence runs in tests, not in production.** *Why:* an undeclared read is a programming
 error, and the right time to fail is when the suite runs, not when someone checks a repo
@@ -541,60 +1139,63 @@ it can't be mistaken for a pass.
 
 ## Known gaps
 
-- **Tracked risky files outside history.** Covered, but only because the history checks
-  include tracked files. If that ever changes, a tracked `deploy.pem` would fall through:
-  `env-tracked` only knows about `.env`.
-- **Patterns match on the file name only**, not the path, so a rule like `.aws/credentials`
-  isn't expressible yet. The matcher needs extending when we want one.
+What pushready knowingly does not do, as of 0.3.6. Each is a limit, not a bug: the ones
+that were bugs are in the dated log above with their fixes.
+
+- **Patterns match on the file name only**, not the path, so `.aws/credentials`,
+  `.kube/config` and `.ssh/config` cannot be written as rules — the bare name `config` is
+  far too common to match on. `kubeconfig` as a single file is covered; the directory
+  forms are not. Extending `test` to take the path is small now that the check interface
+  exists.
+- **Tracked risky files are found only because the history checks include tracked files.**
+  If that ever changed, a tracked `deploy.pem` would fall through: `env-tracked` only knows
+  about `.env`.
 - **A shallow clone prints three "could not be checked" lines**, one per category. Correct,
-  but repetitive. Worth revisiting if more categories are added.
-- **Two git calls per risky file** (the adding commit, then one `for-each-ref --contains` for everything holding it — down from three), plus one `merge-base` per stash entry when nothing else holds it.
-  Fine at current sizes — the `large` scenario checks in about 300 ms — but it grows with
-  the number of findings, not the size of the repo. Revisit if a repo ever reports dozens.
-- **Copies are not followed, only renames.** `git cp` isn't a thing, but `cp secret.pem
-  backup.pem && git add` produces two independent adds of the same content, and git only
-  reports that as a copy under `-C`, which is off by default and expensive. If the copy's
-  name is risky it is still found on its own; if it isn't, the content persists under it
-  after a cleanup. Same failure shape as the rename bug, narrower trigger. The thorough
-  fix for both is blob-level: `git rev-list --all --objects` maps every object to the paths
-  it appears under, which would catch copies, renames and the same secret committed twice
-  in unrelated places — at the cost of walking every object in the repo.
-- **A secret renamed *and* edited in the same commit is not linked.** Git's rename
-  detection scores it below the default 50% similarity and reports an add plus a delete, so
-  both names are found as separate findings (no under-detection) but they are not known to
-  be the same file, and the alias explanation won't mention them.
-- **Rename grouping costs extra git calls.** One history walk with detection on, plus one
-  `branch -r --contains` per alias for the exposure union. Only paid when something risky
-  was found, but it compounds the per-finding cost noted below.
-- **Only the first commit that added a path is looked at.** A file deleted and re-added on
-  a different branch reports the earliest add. Correct for "is this in history", but
+  but repetitive.
+- **Locating a finding costs two git processes per risky path** (`for-each-ref --contains`
+  and `merge-base --is-ancestor`), plus rename grouping when something was found. Measured
+  1 Nov 2026: 1 finding is 17 processes, 100 findings is 215 and 3.2 s. It grows with
+  findings, not repository size; `test/scale.test.js` pins both facts. Batching by commit
+  is in ROADMAP's "Large repositories".
+- **Copies are not followed, only renames.** `cp secret.pem backup.pem && git add` is two
+  independent adds of the same content; git only reports that as a copy under `-C`, which
+  is off by default and expensive. If the copy's name is risky it is found on its own; if it
+  isn't, the content persists under it after a cleanup. The thorough fix is blob-level
+  (`git rev-list --all --objects`), which would also catch the same secret committed twice.
+- **A secret renamed *and* edited in the same commit is not linked.** Git's rename detection
+  scores it below the default 50% similarity, so both names are found as separate findings
+  (no under-detection) but the alias explanation won't connect them.
+- **Only the first commit that added a path is looked at.** A file deleted and re-added on a
+  different branch reports the earliest add. Correct for "is this in history", but
   `--history` could under-report branches in that case.
-- **Deliberately left out for now:** `*.sql`, `*.bak`, `*.dump` (usually legitimate files),
-  `.npmrc` and `.pypirc` (usually just registry config).
-- **Path-based patterns are still not expressible.** The matcher sees the file name only,
-  so `.aws/credentials`, `.kube/config` and `.ssh/config` cannot be written as rules — the
-  bare name `config` is far too common to match on. `kubeconfig` as a single file is
-  covered; the directory forms are not. Extending `test` to take the path as well as the
-  name is small, and worth doing with the v0.3 check interface rather than before it.
+- **Files inside a committed dependency tree are not matched individually.** Deliberate: a
+  `.pem` in `node_modules` or a venv is almost always a CA bundle or a test fixture, and the
+  finding that matters is that the tree was committed. The fix text says so. The cost is
+  that a real key hidden inside one would be reported only once the tree is untracked.
+- **Deliberately left out:** `*.sql`, `*.bak`, `*.dump` (usually legitimate files),
+  `.npmrc` and `.pypirc` (usually just registry config), a bare `vendor/` or `bin/` (often
+  the project's own files; only marker files such as `vendor/autoload.php` count).
 - **Already-collected commits cannot be found, and their absence proves nothing.** Once
-  `git gc` has pruned an unreachable object it is genuinely gone from this clone, which is
-  the desired outcome — but it also means a clean run is not evidence that nothing was
-  ever there. Not reportable: there is nothing left to detect. Stated in the README
-  instead.
-- **`git fsck` cost is untested at scale.** 45 ms on the `large` scenario (600 files, 40
-  commits) with `--connectivity-only`, but it scales with total object count, not with
-  history depth. A monorepo with millions of objects may make it the slowest part of a
-  run. No timeout or opt-out yet; `--skip history-*` in v0.3 would be the natural place.
-- **A pushed tag cannot be detected, only hedged.** Remote-tracking branches record what
-  was pushed; nothing local records which tags were. So a file only on a tag is reported
-  as "not on a remote" with a warning that this clone cannot know, and advice to treat it
+  `git gc` has pruned an unreachable object it is gone from this clone — the desired
+  outcome, but also why a clean run is not evidence that nothing was ever there. Stated in
+  the README rather than reported.
+- **`git fsck` cost is untested at scale.** 45 ms on 600 files with `--connectivity-only`,
+  but it scales with total object count. A monorepo with millions of objects may make it
+  the slowest part of a run; `--skip history-scope,history-keys,history-credentials,history-data`
+  is the opt-out today.
+- **A pushed tag cannot be detected, only hedged.** Nothing local records which tags were
+  pushed, so a file only on a tag is reported "not on a remote" with the advice to treat it
   as pushed if `git push --tags` was ever run. The real answer needs `git ls-remote
-  --tags`, which is a network call and out of scope.
-- **Submodules are still not looked into**, only declared. `git ls-files` and `git log`
-  stop at the boundary, so a risky file inside one is invisible from the parent; the scope
-  check now says so and suggests running pushready inside each submodule. Recursing would
-  mean treating each as its own repo with its own findings and exit code.
+  --tags`, a network call, and is out of scope.
+- **Submodules are declared, not looked into.** A risky file inside one is invisible from
+  the parent; the scope check says so and suggests running pushready inside each.
 - **Acknowledgement matches exact paths only**, so a folder of fixtures has to be listed
-  file by file.
-- **"Big repo" is only tested to 600 files over 40 commits.** Real monorepos are orders of
-  magnitude larger, and the history walk grows with commits × changed files.
+  file by file. A deliberately committed dependency tree is the exception: it is
+  acknowledged by its root folder, because that is what the finding names.
+- **Very large repositories are tested by simulation, not by size.** Repository size is
+  pinned not to change the process count up to 600 files, and the overflow path is tested
+  by lowering `PUSHREADY_MAX_BUFFER` to 256 bytes rather than by building a 64 MB history.
+  A real monorepo has not been run.
+- **Windows console rendering.** The `✔ ✖ ! ? -` icons are UTF-8. In a `cmd.exe` window
+  with a legacy code page they may show as `?`; Windows Terminal, PowerShell 7 and every CI
+  log render them. `--json` sidesteps it entirely.

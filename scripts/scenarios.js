@@ -23,10 +23,16 @@ function makeRepo() {
     mkdirSync(join(dir, path, '..'), { recursive: true });
     writeFileSync(join(dir, path), content);
   };
+  // -f because several scenarios deliberately commit a file their .gitignore
+  // lists, which is the mistake being demonstrated.
   const commit = (message) => {
     git('add', '-A', '-f');
     git('commit', '-q', '--allow-empty', '-m', message);
   };
+  // Commits what is already staged, without adding anything. Needed after a
+  // "git rm --cached", where commit() would force-add the file straight back and
+  // quietly undo the thing the scenario is demonstrating.
+  const commitStaged = (message) => git('commit', '-q', '--allow-empty', '-m', message);
   // A bare repo standing in for GitHub, so "pushed" can be demonstrated offline.
   const push = (branch = 'main') => {
     const remote = mkdtempSync(join(tmpdir(), 'pushready-remote-'));
@@ -48,7 +54,7 @@ function makeRepo() {
   };
   git('init', '-q');
   git('checkout', '-q', '-b', 'main');
-  return { dir, git, write, commit, push, shallowClone, temps, state };
+  return { dir, git, write, commit, commitStaged, push, shallowClone, temps, state };
 }
 
 export const SCENARIOS = [
@@ -176,8 +182,10 @@ export const SCENARIOS = [
       r.write('.env.local', 'DB_PASSWORD=not-a-real-password\n');
       r.commit('first commit');
       // The usual wrong fix: add it to .gitignore and assume that dealt with it.
+      // commitStaged, not commit: the file is still on disk and .gitignore lists
+      // it, so commit()'s "git add -A -f" would put it straight back.
       r.git('rm', '-q', '--cached', '.env.local');
-      r.commit('ignore .env.local');
+      r.commitStaged('ignore .env.local');
     },
   },
   {
@@ -284,6 +292,69 @@ export const SCENARIOS = [
       r.write('test/fixtures/dummy.pem', 'not-a-real-key\n');
       r.write('.pushready.json', '{ "acknowledge": [ { "path": "test/fixtures/dummy.pem", "reason": "fixture for the TLS tests, never a real key" } ] }\n');
       r.commit('first commit');
+    },
+  },
+  {
+    name: 'broken-config',
+    title: 'A .pushready.json that is not valid JSON: say so, acknowledge nothing',
+    expect: 1,
+    build(r) {
+      r.write('README.md', README);
+      r.write('LICENSE', MIT);
+      r.write('.gitignore', 'node_modules\n.env\n');
+      r.write('package.json', '{ "name": "app" }\n');
+      r.write('test/fixtures/dummy.pem', 'not-a-real-key\n');
+      // A trailing comma: the most common way to break a hand-written JSON file.
+      r.write('.pushready.json', '{ "acknowledge": [ "test/fixtures/dummy.pem", ] }\n');
+      r.commit('first commit');
+    },
+  },
+  {
+    name: 'misshaped-config',
+    title: 'A .pushready.json that parses but has the wrong shape: say what is wrong, acknowledge nothing',
+    expect: 1,
+    build(r) {
+      r.write('README.md', README);
+      r.write('LICENSE', MIT);
+      r.write('.gitignore', 'node_modules\n.env\n');
+      r.write('package.json', '{ "name": "app" }\n');
+      r.write('test/fixtures/dummy.pem', 'not-a-real-key\n');
+      // "acknowledge" as a string rather than a list, which JSON.parse accepts.
+      // Until v0.3.2 this was silent: nothing acknowledged, nothing said, and
+      // the user left wondering why their file had no effect.
+      r.write('.pushready.json', '{ "acknowledge": "test/fixtures/dummy.pem" }\n');
+      r.commit('first commit');
+    },
+  },
+  {
+    name: 'no-commits',
+    title: 'A brand new repository: files staged, nothing committed yet',
+    expect: 1,
+    build(r) {
+      r.write('README.md', README);
+      r.write('package.json', '{ "name": "app" }\n');
+      r.write('.env', 'API_KEY=not-a-real-key\n');
+      r.write('deploy.pem', 'not-a-real-key\n');
+      // Staged but never committed: there is nothing to rotate and no history
+      // to clean, so "git rm --cached" really is the whole fix.
+      r.git('add', '-A', '-f');
+    },
+  },
+  {
+    name: 'detached-head',
+    title: 'A key committed on a detached HEAD: check out a branch, do not rewrite history',
+    expect: 1,
+    build(r) {
+      r.write('README.md', README);
+      r.write('LICENSE', MIT);
+      r.write('.gitignore', 'node_modules\n.env\n');
+      r.write('package.json', '{ "name": "app" }\n');
+      r.commit('first commit');
+      r.push();
+      // "git checkout <sha>" to look at something, then committing by accident.
+      r.git('checkout', '-q', '--detach');
+      r.write('scratch.pem', 'not-a-real-key\nline 2\nline 3\nline 4\n');
+      r.commit('experiment, committed while detached');
     },
   },
   {

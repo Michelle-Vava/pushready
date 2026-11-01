@@ -1,0 +1,230 @@
+# stash-only — A key that only ever went into a stash: drop it, do not rewrite history
+# expects exit 1
+
+=== pushready <repo> (exit 1) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✖ 1 private key file in this repository, outside its history
+      deploy.pem — in stash@{1}, never committed to a branch, local only
+      → These names are normally used for private keys. Nothing on a branch holds them, so no history rewrite is needed — see "What to do next" below.
+  ✔ No credential files in git history
+  ✔ No data files in git history
+
+  What to do next
+    1. None of these have left your machine: a stash is never pushed, and nothing was committed to a branch.
+    2. Drop the stash holding deploy.pem. It is not in any commit on a branch, so there is no history to rewrite:
+       git stash drop stash@{1}
+       Check first with "git stash show -p <entry>" if you are not sure what else the stash holds.
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Run again with --history for the full guide.
+
+  Ready to make public: no (1 blocker)
+  8 passed, 0 warnings, 1 failed
+
+=== pushready <repo> --history (exit 1) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✖ 1 private key file in this repository, outside its history
+      deploy.pem
+          status     stashed, never committed to a branch
+          exposure   local only — this repo has no remote, or the file is only in a stash (which is never pushed), so it has not left here
+          added in   <sha>
+          branches   none
+          remotes    none
+          stash      stash@{1} — never committed to a branch, so there is no history to rewrite
+          gitignore  not listed
+      → These names are normally used for private keys. Nothing on a branch holds them, so no history rewrite is needed — see "What to do next" below.
+  ✔ No credential files in git history
+  ✔ No data files in git history
+
+  What to do next
+    1. None of these have left your machine: a stash is never pushed, and nothing was committed to a branch.
+    2. Drop the stash holding deploy.pem. It is not in any commit on a branch, so there is no history to rewrite:
+       git stash drop stash@{1}
+       Check first with "git stash show -p <entry>" if you are not sure what else the stash holds.
+       The commit itself stays on disk until git collects it. To clear it now: git reflog expire --expire-unreachable=now --all && git gc --prune=now
+    Docs: https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
+    Docs: https://github.com/newren/git-filter-repo#how-do-i-install-it
+
+  Ready to make public: no (1 blocker)
+  8 passed, 0 warnings, 1 failed
+
+=== pushready <repo> --json (exit 1) ===
+{
+  "version": "<version>",
+  "dir": "<repo>",
+  "findings": [
+    {
+      "id": "readme",
+      "title": "README",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "README.md found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "license",
+      "title": "LICENSE",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "LICENSE found (MIT)",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "gitignore",
+      "title": ".gitignore",
+      "severity": "blocker",
+      "status": "pass",
+      "message": ".gitignore found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "env-tracked",
+      "title": "Committed secrets",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No .env files committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "dependencies-tracked",
+      "title": "Committed dependencies",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No dependencies or build output committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-scope",
+      "title": "Git history available",
+      "severity": "info",
+      "status": "pass",
+      "message": "Full git history available",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-keys",
+      "title": "Private keys in history",
+      "severity": "blocker",
+      "status": "fail",
+      "message": "1 private key file in this repository, outside its history",
+      "fix": "These names are normally used for private keys. Nothing on a branch holds them, so no history rewrite is needed — see \"What to do next\" below.",
+      "items": [
+        {
+          "path": "deploy.pem",
+          "present": false,
+          "commit": "<sha>",
+          "branch": "",
+          "branches": [],
+          "remotes": [],
+          "tags": [],
+          "refs": [],
+          "stashes": [
+            "stash@{1}"
+          ],
+          "place": "stash",
+          "onCurrentBranch": false,
+          "exposure": "local only",
+          "aliases": [],
+          "kind": "credential",
+          "ignored": false,
+          "acknowledged": false,
+          "reason": ""
+        }
+      ]
+    },
+    {
+      "id": "history-credentials",
+      "title": "Credential files in history",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No credential files in git history",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-data",
+      "title": "Database files in history",
+      "severity": "warning",
+      "status": "pass",
+      "message": "No data files in git history",
+      "fix": null,
+      "items": []
+    }
+  ],
+  "guide": {
+    "steps": [
+      {
+        "id": "rotate",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "None of these have left your machine: a stash is never pushed, and nothing was committed to a branch."
+          }
+        ]
+      },
+      {
+        "id": "drop-stash",
+        "actions": [
+          {
+            "kind": "manual",
+            "text": "Drop the stash holding deploy.pem. It is not in any commit on a branch, so there is no history to rewrite:"
+          },
+          {
+            "kind": "run",
+            "text": "git stash drop stash@{1}",
+            "command": "git stash drop stash@{1}"
+          },
+          {
+            "kind": "manual",
+            "text": "Check first with \"git stash show -p <entry>\" if you are not sure what else the stash holds."
+          },
+          {
+            "kind": "run",
+            "text": "The commit itself stays on disk until git collects it. To clear it now: git reflog expire --expire-unreachable=now --all && git gc --prune=now",
+            "command": "git reflog expire --expire-unreachable=now --all && git gc --prune=now"
+          }
+        ]
+      }
+    ],
+    "links": [
+      "https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository",
+      "https://github.com/newren/git-filter-repo#how-do-i-install-it"
+    ],
+    "detailed": true
+  },
+  "verdict": {
+    "ready": false,
+    "exit": 1,
+    "blockers": 1,
+    "warnings": 0,
+    "unknown": 0,
+    "acknowledged": 0,
+    "skipped": 0,
+    "pushed": false,
+    "strict": false,
+    "line": "Ready to make public: no (1 blocker)"
+  },
+  "notRun": [],
+  "exit": 1
+}

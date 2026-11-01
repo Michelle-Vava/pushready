@@ -9,8 +9,10 @@ import { git, lines } from './git.js';
 import { plural } from './text.js';
 
 // Reasons the local clone cannot show the whole history, so "nothing found"
-// cannot be trusted. Each entry carries the command that fixes it.
-export function historyLimits(dir) {
+// cannot be trusted. Each entry carries the command that fixes it. `context` is
+// the repoContext() for the same run: it already asked fsck for unreachable
+// commits, and this reads whether that worked rather than asking again.
+export function historyLimits(dir, context) {
   const read = (args) => {
     try {
       return git(dir, args).trim();
@@ -42,12 +44,9 @@ export function historyLimits(dir) {
     });
   }
   // Unreachable commits are searched, so say so when that search could not run.
-  // TODO(v0.3.1): this is the second fsck per run — unreachableCommits() already
-  // ran one and swallowed the failure. fsck is the slowest call pushready makes.
-  // Have unreachableCommits report whether it succeeded, and read that here.
-  try {
-    git(dir, ['fsck', '--unreachable', '--connectivity-only', '--no-progress']);
-  } catch {
+  // fsck is the slowest call pushready makes, so it runs once, in repoContext(),
+  // and its failure is read from there instead of being provoked a second time.
+  if (context.fsckFailed) {
     limits.push({ reason: 'unreachable commits could not be listed, so amended or discarded ones were not checked', fix: 'git fsck --unreachable' });
   }
   return limits;
@@ -69,8 +68,14 @@ export function historyLimits(dir) {
 // --reflog adds commits this clone has moved off: amended away, or on a branch
 // that was deleted. Dropped stashes leave the reflog too, so the commits that
 // only git fsck can find are passed in as extra tips.
+//
+// -m matters too. By default "git log" shows no file changes at all for a merge
+// commit, so a file first added *inside* one — typed in while resolving a
+// conflict, say — was never listed and a key born in a merge was reported as
+// "No private key files in git history". -m diffs a merge against each parent;
+// a file that came in from one side shows up twice, which a Set absorbs.
 export function listEverAdded(dir, tips) {
-  const out = git(dir, ['log', '--all', '--reflog', ...tips, '--no-renames', '--diff-filter=A', '--name-only', '--pretty=format:', '-z']);
+  const out = git(dir, ['log', '--all', '--reflog', ...tips, '-m', '--no-renames', '--diff-filter=A', '--name-only', '--pretty=format:', '-z']);
   return new Set(out.split('\0').filter(Boolean));
 }
 
@@ -91,17 +96,21 @@ function stashCommits(dir) {
 // cover a dropped stash, which leaves the reflog entirely. fsck finds those.
 // --connectivity-only skips validating object contents, which is the slow part
 // of fsck and is not what we are asking about.
+//
+// Returns the commits and whether fsck ran at all, because a failure here is not
+// "no unreachable commits": it is a limit on what was checked, and historyLimits
+// reports it as one. This is the only fsck pushready runs.
 function unreachableCommits(dir) {
   try {
-    return git(dir, ['fsck', '--unreachable', '--connectivity-only', '--no-progress'])
+    const commits = git(dir, ['fsck', '--unreachable', '--connectivity-only', '--no-progress'])
       .split('\n')
       .flatMap((line) => {
         const [, type, sha] = line.trim().split(' ');
         return type === 'commit' && sha ? [sha] : [];
       });
+    return { commits, ok: true };
   } catch {
-    // Reported as a limit by historyLimits, not swallowed.
-    return [];
+    return { commits: [], ok: false };
   }
 }
 
@@ -114,7 +123,9 @@ function renamePairs(dir) {
   try {
     // -z gives flat "R<score>\0old\0new\0" triplets, and --format= keeps commit
     // headers out of them, so the output is three fields per rename and nothing else.
-    const fields = git(dir, ['log', '--all', '--diff-filter=R', '--name-status', '-z', '--format=']).split('\0').filter(Boolean);
+    // -m for the same reason as listEverAdded: a rename done inside a merge
+    // commit is otherwise invisible.
+    const fields = git(dir, ['log', '--all', '-m', '--diff-filter=R', '--name-status', '-z', '--format=']).split('\0').filter(Boolean);
     const pairs = [];
     for (let i = 0; i + 2 < fields.length; i += 3) {
       if (fields[i].startsWith('R')) pairs.push([fields[i + 1], fields[i + 2]]);
@@ -156,7 +167,9 @@ export function namesFor(graph, path) {
   return seen;
 }
 
-// Read once per run: which branch we're on, and whether a remote exists at all.
+// Read once per run: which branch we're on, whether a remote exists at all, and
+// the commits that only a stash or fsck can reach. `fsckFailed` is read by
+// historyLimits so that the limit is reported without a second fsck.
 export function repoContext(dir) {
   const read = (args) => {
     try {
@@ -168,9 +181,9 @@ export function repoContext(dir) {
   // --abbrev-ref gives the literal word "HEAD" when detached.
   const branch = read(['rev-parse', '--abbrev-ref', 'HEAD']);
   const stashes = stashCommits(dir);
-  const unreachable = unreachableCommits(dir);
+  const { commits: unreachable, ok } = unreachableCommits(dir);
   // Everything the history walks need as an explicit starting point, on top of --all.
-  return { branch, detached: branch === 'HEAD', hasRemote: read(['remote']).length > 0, stashes, unreachable, tips: [...stashes, ...unreachable] };
+  return { branch, detached: branch === 'HEAD', hasRemote: read(['remote']).length > 0, stashes, unreachable, fsckFailed: !ok, tips: [...stashes, ...unreachable] };
 }
 
 // Everything that keeps a commit alive, sorted into the kinds that need different
@@ -240,7 +253,8 @@ export function describePath(dir, path, names, present, context) {
   // --full-history: with a pathspec, git simplifies merges and can prune the
   // untracked-files parent of a stash, so a file stashed with -u came back with
   // no commit at all. Without simplification the earliest add is always found.
-  const addedIn = (p) => lines(read(['log', '--all', '--reflog', ...context.tips, '--full-history', '--no-renames', '--diff-filter=A', '--format=%H', '--reverse', '--', p]))[0] ?? '';
+  // -m so that a file born inside a merge commit has that commit as its origin.
+  const addedIn = (p) => lines(read(['log', '--all', '--reflog', ...context.tips, '--full-history', '-m', '--no-renames', '--diff-filter=A', '--format=%H', '--reverse', '--', p]))[0] ?? '';
   const commit = addedIn(path);
   const where = whereIs(dir, commit, context);
   // Other names the same content has had. The commit, branch and "still in the
@@ -260,5 +274,10 @@ export function describePath(dir, path, names, present, context) {
   const exposure = remotes.size ? 'pushed' : where.place === 'stash' || !context.hasRemote ? 'local only' : 'not on a remote';
   // One branch is enough for the default output; prefer the one the user is on.
   const branch = where.branches.includes(context.branch) ? context.branch : where.branches[0] ?? where.remotes[0] ?? '';
-  return { path, present, commit, branch, ...where, remotes: [...remotes].sort(), exposure, aliases };
+  // Whether the branch you have checked out is one of the branches holding it.
+  // "Not in the working tree" means "deleted" only if the file is on this
+  // branch's history; a file living on someone else's branch was never here to
+  // delete. Free: it reuses refs already read, with no extra git call.
+  const onCurrentBranch = where.branches.includes(context.branch);
+  return { path, present, commit, branch, ...where, onCurrentBranch, remotes: [...remotes].sort(), exposure, aliases };
 }

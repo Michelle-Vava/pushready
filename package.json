@@ -1,6 +1,6 @@
 {
   "name": "pushready",
-  "version": "0.3.0",
+  "version": "0.3.6",
   "description": "Check a repository for common mistakes before you push it or make it public.",
   "type": "module",
   "bin": {
@@ -12,7 +12,8 @@
   "scripts": {
     "test": "node --test",
     "start": "node src/cli.js",
-    "demo": "node scripts/demo.js"
+    "demo": "node scripts/demo.js",
+    "golden": "node scripts/golden.js"
   },
   "engines": {
     "node": ">=18"

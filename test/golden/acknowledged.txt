@@ -1,0 +1,171 @@
+# acknowledged — A known test fixture, accepted in .pushready.json
+# expects exit 0
+
+=== pushready <repo> (exit 0) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✔ 1 private key file in git history, acknowledged
+      test/fixtures/dummy.pem — still in the repo, on main, local only, acknowledged
+  ✔ No credential files in git history
+  ✔ No data files in git history
+
+  Ready to make public: yes (1 acknowledged)
+  8 passed, 0 warnings, 0 failed, 1 acknowledged
+
+=== pushready <repo> --history (exit 0) ===
+
+Checking <repo>
+
+  ✔ README.md found
+  ✔ LICENSE found (MIT)
+  ✔ .gitignore found
+  ✔ No .env files committed
+  ✔ No dependencies or build output committed
+  ✔ Full git history available
+  ✔ 1 private key file in git history, acknowledged
+      test/fixtures/dummy.pem
+          status        still in the repo
+          exposure      local only — this repo has no remote, or the file is only in a stash (which is never pushed), so it has not left here
+          added in      <sha>
+          branches      main
+          remotes       none
+          gitignore     not listed
+          acknowledged  fixture for the TLS tests, never a real key
+  ✔ No credential files in git history
+  ✔ No data files in git history
+
+  Ready to make public: yes (1 acknowledged)
+  8 passed, 0 warnings, 0 failed, 1 acknowledged
+
+=== pushready <repo> --json (exit 0) ===
+{
+  "version": "<version>",
+  "dir": "<repo>",
+  "findings": [
+    {
+      "id": "readme",
+      "title": "README",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "README.md found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "license",
+      "title": "LICENSE",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "LICENSE found (MIT)",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "gitignore",
+      "title": ".gitignore",
+      "severity": "blocker",
+      "status": "pass",
+      "message": ".gitignore found",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "env-tracked",
+      "title": "Committed secrets",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No .env files committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "dependencies-tracked",
+      "title": "Committed dependencies",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No dependencies or build output committed",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-scope",
+      "title": "Git history available",
+      "severity": "info",
+      "status": "pass",
+      "message": "Full git history available",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-keys",
+      "title": "Private keys in history",
+      "severity": "blocker",
+      "status": "acknowledged",
+      "message": "1 private key file in git history, acknowledged",
+      "fix": null,
+      "items": [
+        {
+          "path": "test/fixtures/dummy.pem",
+          "present": true,
+          "commit": "<sha>",
+          "branch": "main",
+          "branches": [
+            "main"
+          ],
+          "remotes": [],
+          "tags": [],
+          "refs": [],
+          "stashes": [],
+          "place": "branch",
+          "onCurrentBranch": true,
+          "exposure": "local only",
+          "aliases": [],
+          "kind": "credential",
+          "ignored": false,
+          "acknowledged": true,
+          "reason": "fixture for the TLS tests, never a real key"
+        }
+      ]
+    },
+    {
+      "id": "history-credentials",
+      "title": "Credential files in history",
+      "severity": "blocker",
+      "status": "pass",
+      "message": "No credential files in git history",
+      "fix": null,
+      "items": []
+    },
+    {
+      "id": "history-data",
+      "title": "Database files in history",
+      "severity": "warning",
+      "status": "pass",
+      "message": "No data files in git history",
+      "fix": null,
+      "items": []
+    }
+  ],
+  "guide": null,
+  "verdict": {
+    "ready": true,
+    "exit": 0,
+    "blockers": 0,
+    "warnings": 0,
+    "unknown": 0,
+    "acknowledged": 1,
+    "skipped": 0,
+    "pushed": false,
+    "strict": false,
+    "line": "Ready to make public: yes (1 acknowledged)"
+  },
+  "notRun": [],
+  "exit": 0
+}

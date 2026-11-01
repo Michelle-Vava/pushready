@@ -7,10 +7,15 @@ on:
 jobs:
   test:
     strategy:
+      # Every platform pushready claims to run on, and every Node it claims to
+      # support. package.json says engines ">=18", so 18 is tested: claiming a
+      # version nothing runs on is how a release breaks for someone else.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        node: [20, 24]
+        node: [18, 20, 22, 24]
     runs-on: ${{ matrix.os }}
+    name: ${{ matrix.os }} / node ${{ matrix.node }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,7 +23,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+      # The fixtures commit, branch and tag, so git needs an identity and a
+      # predictable default branch on every runner.
+      - name: Configure git
+        run: |
+          git config --global user.name "pushready ci"
+          git config --global user.email "ci@example.com"
+          git config --global init.defaultBranch main
       - run: npm test
       - run: npm run demo
       - name: pushready checks itself
-        run: node src/cli.js .
+        run: node src/cli.js . --strict
+      - name: the recorded scenario output is identical on this platform
+        run: npm run golden -- --check
